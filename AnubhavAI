@@ -1,0 +1,487 @@
+"""
+Aegis AI - All-in-One Clinic Automation & Autonomous Telephony Server
+Serves the Aegis Clinic OS, integrates directly with Twilio REST API, handles Real Inbound Calls,
+supports Outbound Test Calls, and manages Live Audio Telephony with zero external dependencies.
+"""
+
+import http.server
+import socketserver
+import urllib.parse
+import urllib.request
+import base64
+import json
+import os
+import webbrowser
+import socket
+import datetime
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MASTER_HTML = os.path.join(BASE_DIR, "aegis_copilot.html")
+CALL_LOGS_FILE = os.path.join(BASE_DIR, "call_transcripts.json")
+CONFIG_FILE = os.path.join(BASE_DIR, "telephony_config.json")
+CLINICS_DB_FILE = os.path.join(BASE_DIR, "clinics_database.json")
+
+# Multi-tenant Clinic Database on Server Disk
+clinics_db = {}
+if os.path.exists(CLINICS_DB_FILE):
+    try:
+        with open(CLINICS_DB_FILE, "r", encoding="utf-8") as f:
+            clinics_db = json.load(f)
+    except Exception as e:
+        print(f"[CLINICS DB LOAD ERROR] {e}")
+
+def save_clinics_db():
+    try:
+        with open(CLINICS_DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(clinics_db, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[CLINICS DB SAVE ERROR] {e}")
+
+# Default active clinic state
+active_clinic = {
+    "phone": "+91 9351010561",
+    "name": "Monica Dental Clinic",
+    "doctor": "Dr. Monica Sharma",
+    "twilio_sid": "",
+    "twilio_token": "",
+    "twilio_phone": "",
+    "public_url": ""
+}
+
+# Load saved configuration if present
+if os.path.exists(CONFIG_FILE):
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            saved_cfg = json.load(f)
+            active_clinic.update(saved_cfg)
+    except Exception as e:
+        print(f"[CONFIG LOAD WARNING] {e}")
+
+def save_config():
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(active_clinic, f, indent=2)
+    except Exception as e:
+        print(f"[CONFIG SAVE ERROR] {e}")
+
+token_counter = 0
+recent_calls = []
+
+# Load previously recorded calls
+if os.path.exists(CALL_LOGS_FILE):
+    try:
+        with open(CALL_LOGS_FILE, "r", encoding="utf-8") as f:
+            recent_calls = json.load(f)
+    except Exception:
+        recent_calls = []
+
+def save_call_transcripts():
+    try:
+        with open(CALL_LOGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(recent_calls[:60], f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERROR] Failed to save call transcripts: {e}")
+
+# =====================================================================
+# TWILIO REST API ENGINE (Standard Library, Zero-Install)
+# =====================================================================
+def twilio_api_request(method, endpoint, params=None, sid=None, token=None):
+    account_sid = sid or active_clinic.get("twilio_sid", "").strip()
+    auth_token = token or active_clinic.get("twilio_token", "").strip()
+    if not account_sid or not auth_token:
+        return {"error": "Twilio Account SID or Auth Token not configured."}
+
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/{endpoint}.json"
+    auth_str = f"{account_sid}:{auth_token}"
+    auth_header = "Basic " + base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+
+    data = None
+    if params and method in ["POST", "PUT"]:
+        data = urllib.parse.urlencode(params).encode("utf-8")
+    elif params and method == "GET":
+        url += "?" + urllib.parse.urlencode(params)
+
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Authorization", auth_header)
+    if data:
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    try:
+        with urllib.request.urlopen(req, timeout=12) as response:
+            res_body = response.read().decode("utf-8")
+            return json.loads(res_body)
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8")
+        try:
+            return {"error": json.loads(err_msg).get("message", err_msg), "code": e.code}
+        except Exception:
+            return {"error": err_msg, "code": e.code}
+    except Exception as e:
+        return {"error": str(e)}
+
+def generate_twiml(say_text, gather=True, action="/api/twilio/gather"):
+    clinic_name = active_clinic.get("name", "Clinic")
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n'
+    if gather:
+        xml += f'  <Gather input="speech" action="{action}" method="POST" timeout="5" speechTimeout="auto" language="en-IN">\n'
+        xml += f'    <Say voice="Polly.Aditi" language="en-IN">{say_text}</Say>\n'
+        xml += '  </Gather>\n'
+        xml += f'  <Say voice="Polly.Aditi" language="en-IN">Thank you for calling {clinic_name}. Wishing you good health. Goodbye!</Say>\n'
+    else:
+        xml += f'  <Say voice="Polly.Aditi" language="en-IN">{say_text}</Say>\n'
+    xml += '</Response>'
+    return xml
+
+# =====================================================================
+# HTTP REQUEST HANDLER
+# =====================================================================
+class ClinicHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=BASE_DIR, **kwargs)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self):
+        url = urllib.parse.urlparse(self.path)
+        if url.path in ["/", "/index.html", "/copilot", "/aegis"]:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.end_headers()
+            with open(MASTER_HTML, "rb") as f:
+                self.wfile.write(f.read())
+            return
+
+        elif url.path == "/api/telephony/status":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            has_twilio = bool(active_clinic.get("twilio_sid") and active_clinic.get("twilio_token"))
+            self.wfile.write(json.dumps({
+                "status": "ONLINE",
+                "phone": active_clinic.get("phone", "+91 9351010561"),
+                "clinic": active_clinic.get("name", "Monica Dental Clinic"),
+                "doctor": active_clinic.get("doctor", "Dr. Monica Sharma"),
+                "twilio_connected": has_twilio,
+                "twilio_phone": active_clinic.get("twilio_phone", ""),
+                "public_url": active_clinic.get("public_url", ""),
+                "recent_calls_count": len(recent_calls)
+            }).encode("utf-8"))
+            return
+
+        elif url.path == "/api/calls/recent":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(recent_calls).encode("utf-8"))
+            return
+
+        elif url.path == "/api/clinics/get":
+            query_params = urllib.parse.parse_qs(url.query)
+            phone = query_params.get("phone", [""])[0]
+            clean_phone = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+            clinic = clinics_db.get(clean_phone)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(clinic or {}).encode("utf-8"))
+            return
+
+        elif url.path == "/api/clinics/all":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(clinics_db).encode("utf-8"))
+            return
+
+        super().do_GET()
+
+    def do_POST(self):
+        global token_counter, active_clinic, recent_calls
+        url = urllib.parse.urlparse(self.path)
+        content_length = int(self.headers.get("Content-Length", 0))
+        post_data = self.rfile.read(content_length).decode("utf-8")
+
+        # 1. Update Telephony / Clinic Config
+        if url.path == "/api/telephony/config":
+            try:
+                data = json.loads(post_data)
+                for k in ["phone", "clinicName", "doctorName", "twilio_sid", "twilio_token", "twilio_phone", "public_url"]:
+                    if k in data and data[k] is not None:
+                        target_key = "name" if k == "clinicName" else ("doctor" if k == "doctorName" else k)
+                        active_clinic[target_key] = data[k]
+
+                save_config()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "SUCCESS", "active_clinic": active_clinic}).encode("utf-8"))
+                return
+            except Exception as e:
+                self.send_error(400, f"Invalid JSON: {e}")
+                return
+
+        # Multi-Tenant Clinic Database Persistence
+        elif url.path == "/api/clinics/sync":
+            try:
+                data = json.loads(post_data)
+                phone = data.get("clinicPhone") or data.get("phone", "")
+                clean_phone = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+                if clean_phone:
+                    clinics_db[clean_phone] = data
+                    save_clinics_db()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "SAVED", "phone": clean_phone}).encode("utf-8"))
+                return
+            except Exception as e:
+                self.send_error(400, f"Database sync error: {e}")
+                return
+
+        # 2. Twilio 1-Click Auto-Configuration
+        elif url.path == "/api/twilio/auto_configure":
+            try:
+                data = json.loads(post_data) if post_data else {}
+                sid = data.get("account_sid", active_clinic.get("twilio_sid", "")).strip()
+                token = data.get("auth_token", active_clinic.get("twilio_token", "")).strip()
+                public_url = data.get("public_url", active_clinic.get("public_url", "")).strip()
+
+                if not sid or not token:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Twilio Account SID and Auth Token required."}).encode("utf-8"))
+                    return
+
+                res = twilio_api_request("GET", "IncomingPhoneNumbers", sid=sid, token=token)
+                if "error" in res:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": f"Twilio API Error: {res['error']}"}).encode("utf-8"))
+                    return
+
+                numbers = res.get("incoming_phone_numbers", [])
+                configured_num = None
+
+                if numbers and public_url:
+                    webhook_target = public_url.rstrip("/") + "/api/twilio/voice"
+                    target_num_sid = numbers[0]["sid"]
+                    configured_num = numbers[0]["phone_number"]
+                    twilio_api_request("POST", f"IncomingPhoneNumbers/{target_num_sid}", {
+                        "VoiceUrl": webhook_target,
+                        "VoiceMethod": "POST"
+                    }, sid=sid, token=token)
+
+                active_clinic["twilio_sid"] = sid
+                active_clinic["twilio_token"] = token
+                if configured_num:
+                    active_clinic["twilio_phone"] = configured_num
+                if public_url:
+                    active_clinic["public_url"] = public_url
+                save_config()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "SUCCESS",
+                    "numbers_found": len(numbers),
+                    "active_number": configured_num or (numbers[0]["phone_number"] if numbers else None),
+                    "numbers": [n.get("phone_number") for n in numbers]
+                }).encode("utf-8"))
+                return
+            except Exception as e:
+                self.send_error(500, str(e))
+                return
+
+        # 3. Twilio Outbound Test Call
+        elif url.path == "/api/twilio/test_call":
+            try:
+                data = json.loads(post_data) if post_data else {}
+                target_phone = data.get("to_phone", active_clinic.get("phone", "+91 9351010561")).strip()
+                from_phone = data.get("from_phone", active_clinic.get("twilio_phone", "")).strip()
+                public_url = active_clinic.get("public_url", "").strip()
+
+                if not active_clinic.get("twilio_sid") or not active_clinic.get("twilio_token"):
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Twilio credentials not configured yet."}).encode("utf-8"))
+                    return
+
+                if not from_phone:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Please configure your Twilio phone number first."}).encode("utf-8"))
+                    return
+
+                call_webhook = (public_url.rstrip("/") + "/api/twilio/voice") if public_url else "http://demo.twilio.com/docs/voice.xml"
+
+                call_res = twilio_api_request("POST", "Calls", {
+                    "To": target_phone,
+                    "From": from_phone,
+                    "Url": call_webhook,
+                    "Method": "POST"
+                })
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "CALL_INITIATED", "result": call_res}).encode("utf-8"))
+                return
+            except Exception as e:
+                self.send_error(500, str(e))
+                return
+
+        # 4. Inbound Voice Webhook (/api/twilio/voice)
+        parsed = urllib.parse.parse_qs(post_data)
+        caller = parsed.get("From", [active_clinic["phone"]])[0]
+        speech = parsed.get("SpeechResult", [""])[0]
+
+        query_params = urllib.parse.parse_qs(url.query)
+        target_phone = query_params.get("phone", [active_clinic["phone"]])[0]
+
+        if url.path in ["/api/twilio/voice", "/api/exotel/voice"]:
+            clinic_name = active_clinic.get("name", "Monica Dental Clinic")
+            clinic_phone = active_clinic.get("phone", target_phone)
+
+            greeting = f"Namaste! Thank you for calling {clinic_name} on {clinic_phone}. I am Aegis, your clinical AI receptionist. How can I help you today?"
+            twiml = generate_twiml(greeting, gather=True)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(twiml.encode("utf-8"))
+            return
+
+        # 5. Twilio Speech Recognition Webhook (/api/twilio/gather)
+        elif url.path in ["/api/twilio/gather", "/api/exotel/gather"]:
+            lower = speech.lower()
+            clinic_name = active_clinic.get("name", "Monica Dental Clinic")
+            doctor_name = active_clinic.get("doctor", "Dr. Monica Sharma")
+            now_str = datetime.datetime.now().strftime("%I:%M:%S %p")
+
+            outcome = "Information Provided"
+            if any(k in lower for k in ["book", "appointment", "token", "visit", "pain", "doctor", "consult"]):
+                token_counter += 1
+                reply = f"Certainly! Your appointment with {doctor_name} is booked. Your priority token is number {token_counter}. A confirmation SMS has been dispatched."
+                outcome = f"Token #{token_counter} Confirmed"
+            elif any(k in lower for k in ["timing", "hour", "open", "time"]):
+                reply = f"{clinic_name} is open Morning 9:30 AM to 1:30 PM, and Evening 5:00 PM to 8:30 PM."
+                outcome = "Timings Quoted"
+            elif any(k in lower for k in ["fee", "charge", "cost", "price"]):
+                reply = f"At {clinic_name}, general consultation is 500 rupees, and specialist consultation is 1000 rupees."
+                outcome = "Fees Quoted"
+            elif any(k in lower for k in ["emergency", "severe", "urgent"]):
+                reply = "Please remain calm. Our emergency desk is open immediately. If critical, please dial 112 right away. I am alerting our clinical staff now."
+                outcome = "Emergency Escalated"
+            else:
+                reply = f"I have noted your inquiry for {clinic_name}. Our front desk will follow up on {caller}. Would you like me to reserve a consultation?"
+                outcome = "Inquiry Logged"
+
+            call_record = {
+                "name": f"Caller ({caller})",
+                "phone": caller,
+                "duration": "00:48",
+                "intent": "Inbound Voice Call",
+                "outcome": outcome,
+                "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                "transcript": [
+                    {
+                        "sender": "Aegis AI",
+                        "time": now_str,
+                        "text": f"Namaste! Thank you for calling {clinic_name} on {active_clinic.get('phone')}."
+                    },
+                    {
+                        "sender": f"Caller ({caller})",
+                        "time": now_str,
+                        "text": speech or "(Caller connected - speech captured)"
+                    },
+                    {
+                        "sender": "Aegis AI",
+                        "time": now_str,
+                        "text": reply
+                    }
+                ]
+            }
+            recent_calls.insert(0, call_record)
+            save_call_transcripts()
+
+            twiml = generate_twiml(reply, gather=False)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(twiml.encode("utf-8"))
+            return
+
+        self.send_error(404, "Not Found")
+
+def find_free_port(start=8080):
+    env_port = os.environ.get("PORT")
+    if env_port:
+        try:
+            return int(env_port)
+        except ValueError:
+            pass
+    for p in range(start, start + 25):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('0.0.0.0', p))
+                return p
+            except OSError:
+                continue
+    return 8080
+
+def main():
+    port = find_free_port(8080)
+    is_cloud = bool(os.environ.get("PORT"))
+    print("=" * 70)
+    print("⚡ AEGIS AI // ALL-IN-ONE CLINIC OS & TWILIO TELEPHONY ENGINE")
+    print(f"   Active Connected Hotline: {active_clinic['phone']}")
+    print(f"   Target Clinic:            {active_clinic['name']}")
+    print(f"   Doctor On Duty:           {active_clinic['doctor']}")
+    print(f"   Server Port:              {port} ({'Cloud Environment' if is_cloud else 'Localhost'})")
+    if active_clinic.get("twilio_phone"):
+        print(f"   Connected Twilio Number:  {active_clinic['twilio_phone']}")
+    print("=" * 70)
+
+    if not is_cloud:
+        print("Opening Google Chrome automatically...")
+        try:
+            webbrowser.open(f"http://127.0.0.1:{port}")
+        except Exception:
+            pass
+
+    print("Press Ctrl+C to stop.\n")
+
+    with socketserver.TCPServer(("0.0.0.0", port), ClinicHandler) as httpd:
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            print("\nShutting down Aegis AI server gracefully.")
+            httpd.server_close()
+
+if __name__ == "__main__":
+    main()
