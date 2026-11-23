@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aegis AI - Clinic Automation Co-Pilot</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --cyan: #00f0ff;
+      --cyan-glow: rgba(0, 240, 255, 0.45);
+      --green: #22c55e;
+      --amber: #fbbf24;
+      --red: #ef4444;
+      --bg: #030712;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --border: rgba(0, 240, 255, 0.22);
+      --border-bright: rgba(0, 240, 255, 0.7);
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace, sans-serif;
+      background: radial-gradient(circle at 50% 15%, #0d1e38 0%, #030712 75%);
+      color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden;
+    }
+
+    /* ===== AUTH & ONBOARDING ===== */
+    .auth-overlay {
+      position: fixed; inset: 0; background: radial-gradient(circle at 50% 30%, #0d1e38 0%, #020617 80%); z-index: 9999;
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .auth-logo { text-align: center; margin-bottom: 28px; }
+    .auth-logo .logo-icon { font-size: 3rem; margin-bottom: 6px; display: block; filter: drop-shadow(0 0 20px rgba(0,240,255,0.5)); }
+    .auth-logo h1 { color: var(--cyan); font-size: 2rem; font-weight: 900; letter-spacing: 3px; text-shadow: 0 0 20px var(--cyan-glow); margin: 0; }
+    .auth-logo p { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
+
+    .auth-card {
+      background: var(--card-bg); border: 1px solid var(--border-bright); border-radius: 24px;
+      padding: 32px 36px; max-width: 480px; width: 92%; box-shadow: 0 0 80px rgba(0,240,255,0.12);
+    }
+    .auth-card h2 { color: #fff; font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; }
+    .auth-card .auth-sub { color: var(--muted); font-size: 0.82rem; margin-bottom: 20px; }
+    .auth-tabs { display: flex; gap: 0; margin-bottom: 22px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .auth-tab { flex: 1; padding: 10px; text-align: center; font-weight: 700; font-size: 0.88rem; cursor: pointer; background: rgba(15,23,42,0.6); color: var(--muted); border: none; transition: all 0.2s; }
+    .auth-tab.active { background: rgba(0,240,255,0.15); color: var(--cyan); }
+
+    .setup-overlay {
+      position: fixed; inset: 0; background: rgba(3,7,18,0.97); z-index: 9999;
+      display: none; align-items: center; justify-content: center;
+    }
+    .setup-box {
+      background: var(--card-bg); border: 1px solid var(--border-bright); border-radius: 24px;
+      padding: 32px 36px; max-width: 640px; width: 94%; max-height: 92vh; overflow-y: auto;
+      box-shadow: 0 0 80px rgba(0,240,255,0.15);
+    }
+    .setup-box h2 { color: var(--cyan); font-size: 1.35rem; margin-bottom: 4px; }
+    .setup-box .sub { color: var(--muted); font-size: 0.82rem; margin-bottom: 20px; }
+    .setup-steps { display: flex; gap: 0; margin-bottom: 24px; }
+    .setup-step { flex: 1; text-align: center; padding: 10px 8px; font-size: 0.75rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border-bottom: 3px solid rgba(255,255,255,0.08); transition: all 0.3s; }
+    .setup-step.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+    .setup-step.done { color: #22c55e; border-bottom-color: #22c55e; }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; animation: fadeIn 0.3s ease; }
+
+    .setup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .setup-full { margin-bottom: 14px; }
+    .setup-label { display: block; font-size: 0.72rem; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .setup-input {
+      width: 100%; background: #090e1a; border: 1px solid var(--border); color: #fff;
+      padding: 10px 12px; border-radius: 8px; font-size: 0.88rem; outline: none; transition: border-color 0.2s;
+    }
+    .setup-input:focus { border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,240,255,0.15); }
+    .doc-entry {
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px;
+      padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1.5fr 1fr 0.7fr 36px; gap: 10px; align-items: end;
+    }
+    .doc-entry .setup-input { font-size: 0.82rem; padding: 8px 10px; }
+    .doc-remove-btn {
+      background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.5); color: #ef4444; border-radius: 8px;
+      cursor: pointer; font-size: 1rem; padding: 6px; display: flex; align-items: center; justify-content: center;
+    }
+    .doc-remove-btn:hover { background: #ef4444; color: #fff; }
+    .add-doc-btn {
+      background: rgba(0,240,255,0.08); border: 1px dashed var(--border); color: var(--cyan);
+      border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; font-weight: 700; font-size: 0.85rem;
+      margin-bottom: 18px; transition: all 0.2s;
+    }
+    .add-doc-btn:hover { background: rgba(0,240,255,0.18); border-color: var(--cyan); }
+    .step-nav { display: flex; gap: 12px; margin-top: 20px; }
+    .step-nav .btn { flex: 1; padding: 12px; font-size: 0.95rem; justify-content: center; }
+    .launch-btn {
+      width: 100%; padding: 14px; background: linear-gradient(135deg, #00f0ff, #0ea5e9);
+      border: none; border-radius: 12px; color: #030712; font-size: 1.05rem; font-weight: 800;
+      cursor: pointer; letter-spacing: 1px; box-shadow: 0 0 25px rgba(0,240,255,0.4); margin-top: 18px;
+    }
+    .launch-btn:hover { box-shadow: 0 0 40px rgba(0,240,255,0.7); }
+    .auth-footer { text-align: center; margin-top: 14px; font-size: 0.78rem; color: var(--muted); }
+    .auth-footer a { color: var(--cyan); cursor: pointer; text-decoration: none; font-weight: 700; }
+    .auth-footer a:hover { text-decoration: underline; }
+    .auth-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: 0.78rem; }
+    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .welcome-screen { text-align: center; padding: 40px 20px; }
+    .welcome-screen .check-circle { width: 80px; height: 80px; border-radius: 50%; background: rgba(34,197,94,0.15); border: 3px solid #22c55e; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin: 0 auto 16px; box-shadow: 0 0 30px rgba(34,197,94,0.3); }
+    .welcome-screen h2 { color: #22c55e; font-size: 1.5rem; margin-bottom: 6px; }
+    .welcome-screen p { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
+
+    /* ===== MAIN APP ===== */
+    header {
+      background: rgba(3,7,18,0.94); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border);
+      padding: 12px 28px; display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 100;
+    }
+    header::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+    .hud-brand { display: flex; align-items: center; gap: 12px; }
+    .hud-title { font-weight: 800; letter-spacing: 2px; font-size: 1.15rem; color: var(--cyan); text-shadow: 0 0 12px var(--cyan-glow); display: flex; align-items: center; gap: 8px; }
+    .hud-subtitle { font-size: 0.72rem; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+    .settings-btn { background: rgba(0,240,255,0.1); border: 1px solid var(--border); color: var(--cyan); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.78rem; font-weight: 700; }
+    .settings-btn:hover { background: rgba(0,240,255,0.2); }
+    .nav-tabs { display: flex; gap: 6px; background: rgba(15,23,42,0.7); padding: 4px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; }
+    .hud-tab-btn { background: transparent; border: 1px solid transparent; color: #94a3b8; padding: 8px 15px; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 7px; transition: all 0.2s; }
+    .hud-tab-btn:hover { border-color: var(--border); color: #fff; }
+    .hud-tab-btn.active { background: rgba(0,240,255,0.15); border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 16px rgba(0,240,255,0.25); }
+    .container { max-width: 1440px; margin: 18px auto; padding: 0 24px 30px; width: 100%; flex: 1; }
+    .tab-module { display: none; animation: fadeIn 0.3s ease; }
+    .tab-module.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .voice-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 26px; }
+    .core-panel { background: var(--card-bg); backdrop-filter: blur(18px); border: 1px solid var(--border); border-radius: 22px; padding: 26px 28px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .core-label { font-size: 0.72rem; font-weight: 800; color: var(--cyan); letter-spacing: 3px; text-transform: uppercase; }
+    .core-headline { font-size: 1.65rem; font-weight: 800; margin-top: 4px; background: linear-gradient(135deg, #fff 40%, var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .reactor-wrap { position: relative; width: 190px; height: 190px; margin: 20px 0 14px; display: flex; align-items: center; justify-content: center; }
+    .ring-outer { position: absolute; width: 184px; height: 184px; border-radius: 50%; border: 2px dashed rgba(0,240,255,0.35); animation: spin-slow 22s linear infinite; }
+    .ring-mid { position: absolute; width: 144px; height: 144px; border-radius: 50%; border: 2px solid rgba(0,240,255,0.25); border-top-color: var(--cyan); animation: spin-reverse 9s linear infinite; }
+    .reactor-core { width: 104px; height: 104px; border-radius: 50%; background: radial-gradient(circle, #00f0ff 0%, #0369a1 60%, #0f172a 100%); box-shadow: 0 0 45px var(--cyan), inset 0 0 20px #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; outline: none; font-size: 38px; color: #fff; transition: all 0.3s; z-index: 10; }
+    .reactor-core:hover { transform: scale(1.05); }
+    .reactor-core.listening { background: radial-gradient(circle, #22c55e 0%, #059669 60%, #064e3b 100%); box-shadow: 0 0 60px #22c55e, inset 0 0 25px #fff; animation: pulse 1.4s infinite; }
+    .reactor-core.speaking { background: radial-gradient(circle, #fbbf24 0%, #d97706 60%, #78350f 100%); box-shadow: 0 0 60px #fbbf24, inset 0 0 25px #fff; animation: pulse 0.85s infinite; }
+    @keyframes spin-slow { 100% { transform: rotate(360deg); } }
+    @keyframes spin-reverse { 100% { transform: rotate(-360deg); } }
+    @keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.08)} 100%{transform:scale(1)} }
+
+    .telemetry-status { font-size: 0.95rem; font-weight: 700; color: var(--cyan); text-shadow: 0 0 10px var(--cyan-glow); min-height: 24px; }
+    .live-subtitle-bar { margin-top: 10px; background: rgba(0,0,0,0.45); border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px; font-size: 0.84rem; color: #38bdf8; width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: center; }
+    .commands-box { margin-top: 16px; width: 100%; text-align: left; background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+    .cmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .cmd-chip { background: rgba(15,23,42,0.85); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; font-size: 0.78rem; color: #e2e8f0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; }
+    .cmd-chip:hover { border-color: var(--cyan); color: var(--cyan); background: rgba(0,240,255,0.08); transform: translateY(-2px); }
+
+    .hud-right { display: flex; flex-direction: column; gap: 18px; }
+    .token-hud-card { background: var(--card-bg); border: 1px solid var(--border-bright); border-radius: 22px; padding: 24px; text-align: center; box-shadow: 0 0 45px rgba(0,240,255,0.12); position: relative; overflow: hidden; }
+    .token-hud-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #00f0ff, #22c55e, #00f0ff); }
+    .token-huge-number { font-size: 5.2rem; font-weight: 900; color: #00f0ff; font-family: ui-monospace, monospace; line-height: 1; margin: 8px 0; text-shadow: 0 0 25px rgba(0,240,255,0.75); }
+
+    .call-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 26px; }
+    .call-console { background: var(--card-bg); border: 1px solid var(--border); border-radius: 22px; padding: 24px 28px; display: flex; flex-direction: column; }
+    .call-banner-alert { background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(15,23,42,0.9)); border: 1px solid #22c55e; border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; animation: callPulse 1.6s infinite; }
+    @keyframes callPulse { 0%{box-shadow:0 0 10px rgba(34,197,94,0.2)} 50%{box-shadow:0 0 25px rgba(34,197,94,0.6)} 100%{box-shadow:0 0 10px rgba(34,197,94,0.2)} }
+    .waveform-box { display: flex; align-items: center; justify-content: center; gap: 5px; height: 50px; margin: 12px 0; }
+    .wave-bar { width: 5px; height: 12px; background: var(--cyan); border-radius: 4px; }
+    .wave-bar.active { animation: waveBounce 0.8s infinite ease-in-out alternate; }
+    .wave-bar:nth-child(2){animation-delay:.1s} .wave-bar:nth-child(3){animation-delay:.2s} .wave-bar:nth-child(4){animation-delay:.3s}
+    .wave-bar:nth-child(5){animation-delay:.4s} .wave-bar:nth-child(6){animation-delay:.5s} .wave-bar:nth-child(7){animation-delay:.6s} .wave-bar:nth-child(8){animation-delay:.7s}
+    @keyframes waveBounce { 0%{height:8px;background:#0284c7} 100%{height:42px;background:#00f0ff;box-shadow:0 0 12px var(--cyan)} }
+    .call-transcript-area { flex: 1; background: #090e1a; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; max-height: 280px; min-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .call-msg { padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; line-height: 1.45; max-width: 85%; }
+    .call-msg.caller { background: #1e293b; align-self: flex-start; border-left: 3px solid #38bdf8; }
+    .call-msg.aegis { background: rgba(0,240,255,0.12); border: 1px solid var(--border); color: #e0f2fe; align-self: flex-end; border-right: 3px solid var(--cyan); }
+
+    .wa-container { display: grid; grid-template-columns: 1fr 1.6fr; gap: 24px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 22px; padding: 24px; min-height: 560px; }
+    .wa-chats-list { border-right: 1px solid var(--border); padding-right: 18px; }
+    .wa-chat-item { background: rgba(15,23,42,0.6); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; }
+    .wa-chat-item:hover, .wa-chat-item.active { border-color: #22c55e; background: rgba(34,197,94,0.12); transform: translateX(3px); }
+    .wa-window { display: flex; flex-direction: column; }
+    .wa-messages-area { flex: 1; overflow-y: auto; max-height: 380px; min-height: 340px; display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #090e1a; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); }
+    .wa-msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 0.86rem; line-height: 1.45; }
+    .wa-msg.inbound { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 3px; }
+    .wa-msg.ai-outbound { background: #065f46; color: #ecfdf5; align-self: flex-end; border-bottom-right-radius: 3px; border: 1px solid #10b981; }
+
+    .excel-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 22px; padding: 28px; }
+    .excel-dropzone { border: 2px dashed var(--border-bright); border-radius: 16px; padding: 28px; text-align: center; background: rgba(0,240,255,0.03); cursor: pointer; margin-bottom: 20px; }
+    .excel-dropzone:hover { background: rgba(0,240,255,0.08); }
+
+    .email-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 22px; padding: 28px; display: grid; grid-template-columns: 1fr 1.55fr; gap: 26px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 0.75rem; font-weight: 800; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+    .form-input { width: 100%; background: #090e1a; border: 1px solid var(--border); color: #fff; padding: 9px 12px; border-radius: 8px; font-size: 0.85rem; outline: none; }
+    .form-input:focus { border-color: var(--cyan); }
+    textarea.form-input { height: 270px; resize: none; font-family: inherit; line-height: 1.5; }
+
+    .btn { padding: 9px 18px; border-radius: 8px; font-weight: 700; font-size: 0.84rem; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: all 0.2s; }
+    .btn-cyan { background: var(--cyan); color: #030712; }
+    .btn-cyan:hover { background: #38bdf8; }
+    .btn-green { background: #22c55e; color: #030712; }
+    .btn-red { background: #ef4444; color: #fff; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: #fff; }
+    .btn-outline:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    th { text-align: left; padding: 10px 12px; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================= -->
+<!-- SIGN UP / LOGIN SCREEN                                        -->
+<!-- ============================================================= -->
+<div class="auth-overlay" id="auth-screen">
+  <div class="auth-logo">
+    <span class="logo-icon">⚡</span>
+    <h1>AEGIS AI</h1>
+    <p>AI-Powered Clinic Automation Operating System</p>
+  </div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="showAuthTab('signup')">Create Account</button>
+      <button class="auth-tab" onclick="showAuthTab('login')">Sign In</button>
+    </div>
+
+    <!-- SIGN UP FORM -->
+    <div id="auth-signup">
+      <h2>Register Your Clinic</h2>
+      <p class="auth-sub">Set up your clinic's AI voice receptionist in seconds.</p>
+      <div class="setup-row">
+        <div>
+          <label class="setup-label">Doctor / Owner Name *</label>
+          <input class="setup-input" id="reg-name" placeholder="e.g. Dr. Monica Sharma" value="Dr. Monica Sharma">
+        </div>
+        <div>
+          <label class="setup-label">Clinic Name *</label>
+          <input class="setup-input" id="reg-clinic" placeholder="e.g. Monica Dental Clinic" value="Monica Dental Clinic">
+        </div>
+      </div>
+      <div class="setup-row">
+        <div>
+          <label class="setup-label">Clinic Mobile Number (AI Connects to this) *</label>
+          <input class="setup-input" id="reg-phone" placeholder="e.g. +91 9351010561" value="+91 9351010561">
+        </div>
+        <div>
+          <label class="setup-label">Primary Specialty</label>
+          <input class="setup-input" id="reg-spec" placeholder="e.g. Dental Care" value="Dental Care & Surgery">
+        </div>
+      </div>
+      <div class="setup-row">
+        <div>
+          <label class="setup-label">Email Address *</label>
+          <input class="setup-input" id="reg-email" type="email" placeholder="e.g. monica@clinic.com" value="monica@dentalclinic.com">
+        </div>
+        <div>
+          <label class="setup-label">Password *</label>
+          <input class="setup-input" id="reg-password" type="password" value="clinic123">
+        </div>
+      </div>
+      <button class="launch-btn" onclick="handleSignUp()" style="margin-top:10px;">
+        🚀 Register Clinic & Connect Number →
+      </button>
+      <div class="auth-divider">or test instantly with phone number</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-green" onclick="loginWithSpecificPhone('+91 9351010561')" style="justify-content:center; padding:10px; font-size:0.85rem;">
+          ⚡ Connect: +91 9351010561 (Monica Dental Clinic)
+        </button>
+        <button class="btn btn-outline" onclick="loginWithSpecificPhone('+91 98111 22334')" style="justify-content:center; padding:10px; font-size:0.85rem; border-color:var(--border);">
+          ⚡ Connect: +91 98111 22334 (Apex Dental Care)
+        </button>
+      </div>
+      <div class="auth-footer" style="margin-top:14px;">Already registered? <a onclick="showAuthTab('login')">Sign In with Phone</a></div>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div id="auth-login" style="display:none;">
+      <h2>Clinic Sign In</h2>
+      <p class="auth-sub">Enter your clinic's mobile number. Aegis automatically connects to that number.</p>
+      <div class="setup-full">
+        <label class="setup-label">Clinic Mobile Number *</label>
+        <input class="setup-input" id="login-phone" placeholder="e.g. +91 9351010561" value="+91 9351010561">
+      </div>
+      <div class="setup-full">
+        <label class="setup-label">Password / PIN</label>
+        <input class="setup-input" id="login-password" type="password" value="clinic123">
+      </div>
+      <button class="launch-btn" onclick="handleLogin()" style="margin-top:8px;">
+        📞 Sign In & Connect Number →
+      </button>
+      <div class="auth-divider">or quick connect demo numbers</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-green" onclick="loginWithSpecificPhone('+91 9351010561')" style="justify-content:center; padding:10px; font-size:0.85rem;">
+          ⚡ Connect: +91 9351010561 (Monica Dental Clinic)
+        </button>
+        <button class="btn btn-outline" onclick="loginWithSpecificPhone('+91 98111 22334')" style="justify-content:center; padding:10px; font-size:0.85rem; border-color:var(--border);">
+          ⚡ Connect: +91 98111 22334 (Apex Dental Care)
+        </button>
+      </div>
+      <div class="auth-footer" style="margin-top:14px;">
+        <a onclick="showAuthTab('signup')">New Clinic? Register with your Phone Number</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================= -->
+<!-- MULTI-STEP CLINIC ONBOARDING WIZARD                            -->
+<!-- ============================================================= -->
+<div class="setup-overlay" id="setup-wizard">
+  <div class="setup-box">
+    <!-- Progress Steps -->
+    <div class="setup-steps">
+      <div class="setup-step active" id="step-ind-1">① Clinic Details</div>
+      <div class="setup-step" id="step-ind-2">② Doctors & Rooms</div>
+      <div class="setup-step" id="step-ind-3">③ Launch!</div>
+    </div>
+
+    <!-- STEP 1: Clinic Info -->
+    <div class="step-panel active" id="step-1">
+      <h2>Tell us about your clinic</h2>
+      <p class="sub">This information appears on your dashboard, call greetings, emails, and WhatsApp replies.</p>
+
+      <div class="setup-full">
+        <label class="setup-label">Clinic Name *</label>
+        <input class="setup-input" id="s-clinic-name" placeholder="e.g. Monica Dental Clinic">
+      </div>
+      <div class="setup-row">
+        <div>
+          <label class="setup-label">Clinic Phone *</label>
+          <input class="setup-input" id="s-clinic-phone" placeholder="e.g. +91 98765-43210">
+        </div>
+        <div>
+          <label class="setup-label">Clinic Address</label>
+          <input class="setup-input" id="s-clinic-address" placeholder="e.g. 42 MG Road, Delhi">
+        </div>
+      </div>
+      <div class="setup-row">
+        <div>
+          <label class="setup-label">General Consultation Fee</label>
+          <input class="setup-input" id="s-fee-general" placeholder="e.g. ₹500" value="₹500">
+        </div>
+        <div>
+          <label class="setup-label">Specialist Fee</label>
+          <input class="setup-input" id="s-fee-specialist" placeholder="e.g. ₹1000" value="₹1000">
+        </div>
+      </div>
+      <div class="setup-row">
+        <div>
+          <label class="setup-label">Morning OPD Hours</label>
+          <input class="setup-input" id="s-time-morning" value="9:00 AM - 1:00 PM">
+        </div>
+        <div>
+          <label class="setup-label">Evening OPD Hours</label>
+          <input class="setup-input" id="s-time-evening" value="5:00 PM - 8:00 PM">
+        </div>
+      </div>
+
+      <div class="step-nav">
+        <button class="btn btn-cyan" onclick="goToStep(2)">Next — Add Doctors →</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Doctors -->
+    <div class="step-panel" id="step-2">
+      <h2>Add your doctors</h2>
+      <p class="sub">Aegis routes patients to the right doctor when they speak a name or specialty.</p>
+
+      <div id="doctors-list">
+        <div class="doc-entry">
+          <div><label class="setup-label">Doctor Name</label><input class="setup-input doc-name" placeholder="e.g. Dr. Monica Sharma"></div>
+          <div><label class="setup-label">Specialty</label><input class="setup-input doc-spec" placeholder="e.g. Dentist"></div>
+          <div><label class="setup-label">Room</label><input class="setup-input doc-room" value="Room 1"></div>
+          <button class="doc-remove-btn" onclick="this.parentElement.remove()">✕</button>
+        </div>
+      </div>
+      <div class="add-doc-btn" onclick="addDoctorRow()">+ Add Another Doctor</div>
+
+      <div class="step-nav">
+        <button class="btn btn-outline" onclick="goToStep(1)">← Back</button>
+        <button class="btn btn-cyan" onclick="goToStep(3)">Next — Preview & Launch →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Confirm & Launch -->
+    <div class="step-panel" id="step-3">
+      <div class="welcome-screen">
+        <div class="check-circle">✓</div>
+        <h2>You're All Set!</h2>
+        <p id="welcome-summary">Your clinic AI assistant is configured and ready to go.</p>
+        <button class="launch-btn" onclick="launchAegis()">🚀 Launch Aegis AI Dashboard</button>
+        <div style="margin-top:14px; font-size:0.78rem; color:var(--muted);">You can change these settings anytime from ⚙️ Settings</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================= -->
+<!-- CALL TRANSCRIPT VIEWER MODAL                                   -->
+<!-- ============================================================= -->
+<div class="setup-overlay" id="transcript-modal" style="display:none;">
+  <div class="setup-box" style="max-width:560px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:14px;">
+      <div>
+        <h2 id="modal-transcript-title" style="color:var(--cyan); font-size:1.15rem; margin:0;">Call Transcript</h2>
+        <div style="font-size:0.75rem; color:var(--muted);" id="modal-transcript-sub">Hotline: +91 9351010561</div>
+      </div>
+      <button onclick="closeTranscriptModal()" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:1.3rem;">✕</button>
+    </div>
+    <div id="modal-transcript-body" style="background:#090e1a; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:16px; max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; font-size:0.84rem; line-height:1.45;">
+    </div>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn btn-cyan" style="flex:1;" onclick="copyModalTranscript()">📋 Copy Full Transcript</button>
+      <button class="btn btn-outline" onclick="closeTranscriptModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================= -->
+<!-- ALL-IN-ONE TWILIO & CLOUD TELEPHONY MODAL                     -->
+<!-- ============================================================= -->
+<div class="setup-overlay" id="twilio-modal" style="display:none;">
+  <div class="setup-box" style="max-width:620px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:14px;">
+      <div>
+        <h2 style="color:var(--cyan); font-size:1.2rem; margin:0; display:flex; align-items:center; gap:8px;">
+          <span>⚡</span> Twilio All-in-One Cloud Telephony
+        </h2>
+        <div style="font-size:0.75rem; color:var(--muted); margin-top:2px;">Connect Twilio so whoever calls your clinic number gets answered by AI</div>
+      </div>
+      <button onclick="closeTwilioModal()" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:1.3rem;">✕</button>
+    </div>
+
+    <!-- Telephony Status Indicator -->
+    <div id="tw-status-banner" style="background:rgba(0,240,255,0.06); border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:16px; font-size:0.82rem; display:flex; justify-content:space-between; align-items:center;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span id="tw-status-dot" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#fbbf24;"></span>
+        <strong id="tw-status-text" style="color:#fbbf24;">Ready to Connect</strong>
+      </div>
+      <span id="tw-phone-badge" style="color:var(--cyan); font-family:monospace; font-weight:700;">No Twilio number</span>
+    </div>
+
+    <div class="setup-row">
+      <div>
+        <label class="setup-label">Twilio Account SID</label>
+        <input class="setup-input" id="tw-account-sid" placeholder="e.g. ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      </div>
+      <div>
+        <label class="setup-label">Twilio Auth Token</label>
+        <input class="setup-input" id="tw-auth-token" type="password" placeholder="Auth Token">
+      </div>
+    </div>
+
+    <div class="setup-row">
+      <div>
+        <label class="setup-label">Twilio Phone Number (Virtual DID)</label>
+        <input class="setup-input" id="tw-phone-number" placeholder="e.g. +12055550199 or +91...">
+      </div>
+      <div>
+        <label class="setup-label">Public Server Webhook URL</label>
+        <input class="setup-input" id="tw-public-url" placeholder="e.g. https://xxx.localhost.run">
+      </div>
+    </div>
+
+    <div style="background:#090e1a; border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px; margin:14px 0; font-size:0.78rem; color:#cbd5e1; line-height:1.5;">
+      <strong style="color:#4ade80;">💡 How it works all-in-one:</strong><br>
+      1. Click <strong>⚡ 1-Click Auto-Configure</strong>: Aegis connects to Twilio's API, sets up your number's Voice URL to point to this AI server automatically!<br>
+      2. If you want patients to dial your personal SIM (<code id="tw-carrier-sim">+91 9351010561</code>), forward calls by dialing <strong style="color:var(--cyan);">*21*&lt;Your_Twilio_Number&gt;#</strong> on your phone.
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-cyan" style="flex:1;" onclick="handleTwilioAutoConfigure()">
+        ⚡ 1-Click Auto-Configure Twilio
+      </button>
+      <button class="btn btn-green" onclick="handleTwilioOutboundTest()">
+        📞 Test Call My Real Phone
+      </button>
+      <button class="btn btn-outline" onclick="closeTwilioModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================= -->
+<!-- SMART ONBOARDING NOTIFICATION: CONNECT TWILIO REAL CALLS     -->
+<!-- ============================================================= -->
+<div class="setup-overlay" id="twilio-signup-prompt-modal" style="display:none; z-index:99999;">
+  <div class="setup-box" style="max-width:540px; text-align:center; padding:32px 28px; position:relative;">
+    <div style="width:68px; height:68px; border-radius:50%; background:rgba(0,240,255,0.12); border:2px solid var(--cyan); display:flex; align-items:center; justify-content:center; font-size:2rem; margin:0 auto 16px auto; box-shadow:0 0 25px rgba(0,240,255,0.4);">
+      📞
+    </div>
+    <div style="font-size:0.75rem; color:#4ade80; font-weight:800; letter-spacing:2px; text-transform:uppercase;">
+      AUTOMATED SETUP DETECTED
+    </div>
+    <h2 style="font-size:1.45rem; font-weight:800; color:#fff; margin:6px 0 10px 0;" id="tw-prompt-clinic-name">
+      Connect Real Phone Calls to Monica Dental Clinic?
+    </h2>
+    <p style="font-size:0.86rem; color:#cbd5e1; line-height:1.55; margin-bottom:18px;" id="tw-prompt-desc">
+      Would you like Aegis AI to automatically answer incoming telephone calls to <strong style="color:var(--cyan);" id="tw-prompt-phone">+91 9351010561</strong> using Twilio Cloud Telephony?
+    </p>
+
+    <!-- Value highlights box -->
+    <div style="background:#090e1a; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; text-align:left; font-size:0.8rem; line-height:1.5; color:#94a3b8; margin-bottom:22px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="color:#22c55e;">✔</span>
+        <span><strong>First 1,250 Minutes Free:</strong> ($15.00 free trial credits included)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="color:#22c55e;">✔</span>
+        <span><strong>Zero Human Delay:</strong> AI answers on 1st ring in friendly voice</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="color:#22c55e;">✔</span>
+        <span><strong>Auto-Books Appointments:</strong> Issues tokens & records full call transcripts</span>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="launch-btn" onclick="acceptTwilioSetup()" style="font-size:0.95rem; padding:14px;">
+        🚀 Yes, Set Up Twilio AI Calls Now →
+      </button>
+      <button class="btn btn-outline" onclick="declineTwilioSetup()" style="justify-content:center; padding:10px; font-size:0.82rem; color:var(--muted); border-color:rgba(255,255,255,0.1);">
+        Maybe Later (Use In-Browser Softphone Only)
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================= -->
+<!-- MAIN APPLICATION (hidden until setup complete)                 -->
+<!-- ============================================================= -->
+<div id="main-app" style="display:none; flex-direction:column; flex:1;">
+  <header>
+    <div class="hud-brand">
+      <div class="hud-title"><span>⚡</span><span id="header-clinic-name">AEGIS AI</span></div>
+      <div class="hud-subtitle" id="header-subtitle">Clinic Automation Co-Pilot</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div class="nav-tabs">
+        <button class="hud-tab-btn active" onclick="switchHudTab('voice')">🎙️ Voice Token Desk</button>
+        <button class="hud-tab-btn" onclick="switchHudTab('calls')">📞 AI Call Desk</button>
+        <button class="hud-tab-btn" onclick="switchHudTab('whatsapp')">💬 WhatsApp Bot</button>
+        <button class="hud-tab-btn" onclick="switchHudTab('excel')">📊 Excel Hub</button>
+        <button class="hud-tab-btn" onclick="switchHudTab('email')">✉️ Email AI</button>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="settings-btn" onclick="openTwilioModal()" style="border-color:var(--cyan); color:var(--cyan);">⚡ Twilio Hub</button>
+        <div style="background:rgba(0,240,255,0.08); border:1px solid var(--border); padding:6px 12px; border-radius:8px; font-size:0.78rem; display:flex; align-items:center; gap:6px;">
+          <span>👤</span>
+          <strong id="user-display-name" style="color:var(--cyan);">Dr. Monica</strong>
+        </div>
+        <button class="settings-btn" onclick="openSetup()">⚙️ Profile</button>
+        <button class="settings-btn" style="color:#ef4444; border-color:rgba(239,68,68,0.4);" onclick="handleLogout()" title="Sign out to register or switch clinic">🚪 Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- MODULE 1: VOICE TOKEN DESK -->
+    <div id="module-voice" class="tab-module active">
+      <div class="voice-grid">
+        <div class="core-panel">
+          <div class="core-label">AUTONOMOUS CLINIC AGENT</div>
+          <h2 class="core-headline">Hands-Free Front Desk</h2>
+          <p style="font-size:0.84rem; color:var(--muted); margin-top:4px;" id="voice-clinic-info">
+            Tap the core. Speak patient name and doctor — Aegis assigns tokens and announces.
+          </p>
+          <div class="reactor-wrap">
+            <div class="ring-outer"></div>
+            <div class="ring-mid"></div>
+            <button id="reactor" class="reactor-core" onclick="toggleVoice()">⚡</button>
+          </div>
+          <div class="telemetry-status" id="voice-hud-status">STANDBY // CLICK CORE OR SPACEBAR</div>
+          <div class="live-subtitle-bar" id="voice-heard-box">🎙️ Microphone ready...</div>
+          <div class="commands-box">
+            <div style="font-size:0.72rem; color:var(--cyan); font-weight:800; text-transform:uppercase; margin-bottom:8px;">Voice Commands (Say or Click):</div>
+            <div class="cmd-grid" id="voice-cmd-chips"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div class="token-hud-card">
+            <div style="font-size:0.75rem; letter-spacing:3px; color:var(--cyan); font-weight:800;">ACTIVE DIGITAL TOKEN</div>
+            <div class="token-huge-number" id="active-token-num">—</div>
+            <div style="font-size:1.6rem; font-weight:800;" id="active-patient-name">Waiting for first patient...</div>
+            <div style="display:inline-block; margin-top:8px; background:rgba(0,240,255,0.14); border:1px solid var(--cyan); padding:5px 18px; border-radius:20px; font-weight:700; font-size:0.88rem;" id="active-room">—</div>
+            <div style="margin-top:10px; font-size:0.78rem; color:#4ade80;" id="active-broadcast"></div>
+          </div>
+          <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:22px; padding:20px; flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:10px;">
+              <div style="font-size:0.8rem; color:var(--cyan); font-weight:800; letter-spacing:2px; text-transform:uppercase;">Today's Live Queue</div>
+              <button class="btn btn-outline" style="padding:4px 10px; font-size:0.75rem;" onclick="callNextVoice()">📢 Call Next</button>
+            </div>
+            <div id="empty-queue-msg" style="text-align:center; color:var(--muted); padding:20px; font-size:0.85rem;">No patients yet. Speak a name to issue the first token.</div>
+            <table id="queue-table" style="display:none;">
+              <thead><tr><th>Token</th><th>Patient</th><th>Doctor & Room</th><th>Status</th></tr></thead>
+              <tbody id="voice-queue-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 2: AI CALL DESK -->
+    <div id="module-calls" class="tab-module">
+      <div class="call-grid">
+        <div class="call-console">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:14px; margin-bottom:18px;">
+            <div>
+              <div style="font-size:0.72rem; color:var(--cyan); font-weight:800; letter-spacing:2px; text-transform:uppercase;">AI TELEPHONY // INBOUND CALL RECEPTION</div>
+              <div style="font-size:1.15rem; font-weight:800; color:#fff; margin-top:2px;" id="call-clinic-phone">Hotline: +91 9351010561</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button class="btn btn-outline" onclick="openTwilioModal()" style="border-color:var(--cyan); color:var(--cyan); font-size:0.75rem; padding:6px 12px;">
+                ⚡ Twilio Hub
+              </button>
+              <button class="btn btn-outline" id="connect-sim-btn" onclick="toggleSimGuide()" style="border-color:#22c55e; color:#22c55e; font-size:0.75rem; padding:6px 12px;">
+                📱 Connect SIM <span id="btn-phone-display">+91 9351010561</span>
+              </button>
+              <button class="btn btn-green" onclick="simulateIncomingCall()" style="font-size:0.75rem; padding:6px 12px;">
+                📞 Call Hotline (In-Browser Phone)
+              </button>
+              <label style="font-size:0.75rem; color:var(--muted); cursor:pointer;"><input type="checkbox" id="auto-answer-toggle" checked style="accent-color:var(--cyan);"> Auto-Answer</label>
+            </div>
+          </div>
+
+          <!-- Cellular Network Notice Banner -->
+          <div style="background:rgba(0,240,255,0.06); border:1px solid rgba(0,240,255,0.2); border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:0.78rem; line-height:1.45; color:#cbd5e1; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <strong style="color:var(--cyan);">ℹ️ Telecom Bridge Guide:</strong> Calling this number from a physical mobile phone rings your SIM card handset via cellular towers. To have AI answer real phone calls, enable <strong>Call Forwarding</strong> on your phone.
+            </div>
+            <button class="btn btn-outline" onclick="toggleSimGuide()" style="padding:4px 10px; font-size:0.72rem; color:var(--cyan); border-color:var(--border); white-space:nowrap; margin-left:10px;">View Setup</button>
+          </div>
+
+          <!-- Real SIM Connection Guide Drawer -->
+          <div id="real-sim-guide" style="display:none; background:rgba(6,78,59,0.3); border:1px solid #22c55e; border-radius:14px; padding:16px; margin-bottom:18px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <strong style="color:#4ade80; font-size:0.95rem;">📞 How to Receive Real Calls from <span id="guide-phone-title">+91 9351010561</span> into Aegis AI:</strong>
+              <button onclick="toggleSimGuide()" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem;">✕</button>
+            </div>
+            <div style="font-size:0.8rem; color:#e2e8f0; line-height:1.5;">
+              <p style="margin-bottom:8px;"><strong>Method 1: Instant Carrier Call Forwarding (Keep your existing phone &amp; SIM)</strong><br>
+              On the phone carrying SIM <code id="guide-phone-sim">+91 9351010561</code>, dial the following carrier code in your mobile phone dialer:
+              </p>
+              <div style="background:#090e1a; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px; margin-bottom:8px; font-family:monospace; font-size:0.82rem;">
+                • Forward when unanswered (after 3 rings): <strong style="color:var(--cyan);">*61*&lt;Cloud_AI_Number&gt;#</strong><br>
+                • Forward when line busy: <strong style="color:var(--cyan);">*67*&lt;Cloud_AI_Number&gt;#</strong><br>
+                • Forward all incoming calls: <strong style="color:var(--cyan);">*21*&lt;Cloud_AI_Number&gt;#</strong><br>
+                • Cancel forwarding anytime: <strong style="color:#ef4444;">##002#</strong>
+              </div>
+              <p style="margin-bottom:8px;"><strong>Method 2: Exotel / Twilio Webhook (India Standard)</strong><br>
+              In your Exotel / Twilio voice dashboard, set Voice Webhook URL to:<br>
+              <code id="guide-phone-server">http://127.0.0.1:8080/api/twilio/voice</code>
+              </p>
+              <p style="color:#a7f3d0; font-size:0.75rem;">
+                ✓ Server script ready: <code>telephony_server.py</code> and <code>reception_server.py</code> in your folder handle live incoming calls and speak back in AI voice.
+              </p>
+            </div>
+          </div>
+          <div id="incoming-call-alert" class="call-banner-alert" style="display:none;">
+            <div>
+              <div style="font-size:0.75rem; font-weight:800; color:#4ade80; letter-spacing:2px;">☎️ INCOMING CALL...</div>
+              <div style="font-size:1.2rem; font-weight:800; color:#fff; margin-top:3px;" id="ringing-caller-name">Patient</div>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn btn-green" onclick="answerCall()">📞 Accept</button>
+              <button class="btn btn-red" onclick="rejectCall()">Hang Up</button>
+            </div>
+          </div>
+          <div id="active-call-hud" style="display:none; margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,240,255,0.06); border:1px solid var(--border); border-radius:12px; padding:10px 16px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#22c55e; box-shadow:0 0 10px #22c55e;"></span>
+                <strong style="color:#22c55e;">CONNECTED</strong>
+                <span style="color:var(--muted); font-size:0.85rem;" id="active-call-id"></span>
+              </div>
+              <div style="display:flex; align-items:center; gap:14px;">
+                <strong style="font-family:monospace; font-size:1.1rem; color:var(--cyan);" id="call-timer-display">00:00</strong>
+                <button class="btn btn-red" style="padding:6px 12px; font-size:0.78rem;" onclick="hangupCall()">End Call</button>
+              </div>
+            </div>
+            <div class="waveform-box"><div class="wave-bar active"></div><div class="wave-bar active"></div><div class="wave-bar active"></div><div class="wave-bar active"></div><div class="wave-bar active"></div><div class="wave-bar active"></div><div class="wave-bar active"></div><div class="wave-bar active"></div></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="font-size:0.72rem; color:var(--cyan); font-weight:800; letter-spacing:2px; text-transform:uppercase;">Live Call Transcript:</div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-outline" style="padding:4px 10px; font-size:0.72rem; color:var(--cyan); border-color:var(--border);" onclick="copyCallTranscript()">📋 Copy</button>
+              <button class="btn btn-outline" style="padding:4px 10px; font-size:0.72rem; color:#4ade80; border-color:rgba(74,222,128,0.4);" onclick="downloadCallTranscript()">📥 Download (.txt)</button>
+            </div>
+          </div>
+          <div class="call-transcript-area" id="call-transcript-box">
+            <div style="color:var(--muted); font-size:0.8rem; text-align:center; margin:auto;">Aegis on standby. Click "Simulate Call" to test.</div>
+          </div>
+          <div style="margin-top:14px;">
+            <div style="font-size:0.72rem; color:var(--cyan); font-weight:800; text-transform:uppercase; margin-bottom:6px;">Test Caller Scenarios:</div>
+            <div class="cmd-grid" id="call-test-chips"></div>
+          </div>
+        </div>
+        <div class="hud-right">
+          <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:22px; padding:22px; flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px;">
+              <div style="font-size:0.8rem; color:var(--cyan); font-weight:800; letter-spacing:2px; text-transform:uppercase;">Recent Calls (Auto-Handled)</div>
+              <span style="font-size:0.72rem; color:var(--muted);">Click any call to view transcript</span>
+            </div>
+            <table><thead><tr><th>Caller</th><th>Duration</th><th>Intent</th><th>Outcome</th><th>Transcript</th></tr></thead>
+              <tbody id="call-logs-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 3: WHATSAPP -->
+    <div id="module-whatsapp" class="tab-module">
+      <div class="wa-container">
+        <div class="wa-chats-list">
+          <div style="font-size:0.8rem; color:#22c55e; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin-bottom:12px;">Incoming Patient Chats</div>
+          <div id="wa-chats-container"></div>
+        </div>
+        <div class="wa-window">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:12px;">
+            <div>
+              <strong id="wa-active-name" style="font-size:1.1rem; color:#22c55e;">Select a chat</strong>
+              <div style="font-size:0.75rem; color:var(--muted);">Automated WhatsApp Protocol</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-green" onclick="generateAiWaReply()">⚡ AI Auto-Reply</button>
+              <button class="btn btn-outline" onclick="openWhatsAppWebDirect()">📲 Open WhatsApp Web</button>
+            </div>
+          </div>
+          <div class="wa-messages-area" id="wa-messages-box"></div>
+          <div style="margin-top:14px; display:flex; gap:10px;">
+            <input type="text" id="wa-input" class="form-input" placeholder="Type reply or click AI Auto-Reply...">
+            <button class="btn btn-cyan" onclick="sendCustomWa()">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 4: EXCEL -->
+    <div id="module-excel" class="tab-module">
+      <div class="excel-container">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h3 style="font-size:1.35rem; font-weight:800; color:var(--cyan);">📊 Patient Sheet Intelligence</h3>
+            <p style="font-size:0.85rem; color:var(--muted);">Upload any .xlsx or .csv to query patient records.</p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn btn-cyan" onclick="exportQueueToExcel()">📥 Export Queue to Excel</button>
+          </div>
+        </div>
+        <div class="excel-dropzone" onclick="document.getElementById('excel-file-input').click()">
+          <input type="file" id="excel-file-input" style="display:none;" accept=".xlsx,.xls,.csv" onchange="handleExcelUpload(event)">
+          <div style="font-size:2.2rem; margin-bottom:6px;">📑</div>
+          <strong style="color:var(--cyan); font-size:1.05rem;">Click or Drop Your Clinic Excel / CSV Here</strong>
+        </div>
+        <div style="background:rgba(0,0,0,0.35); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:18px; display:flex; gap:12px; align-items:center;">
+          <span>🤖 <strong>Search:</strong></span>
+          <input type="text" id="excel-query-input" class="form-input" style="flex:1;" placeholder="Type patient name, doctor, diagnosis...">
+          <button class="btn btn-cyan" onclick="queryExcelData()">Filter</button>
+          <button class="btn btn-outline" onclick="resetExcelFilter()">Reset</button>
+        </div>
+        <div style="max-height:360px; overflow:auto; border:1px solid var(--border); border-radius:12px; background:#090e1a;">
+          <table><thead><tr id="excel-th-row"></tr></thead><tbody id="excel-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 5: EMAIL -->
+    <div id="module-email" class="tab-module">
+      <div class="email-container">
+        <div>
+          <h3 style="font-size:1.2rem; font-weight:800; color:var(--cyan); margin-bottom:14px;">✉️ Medical Email Dispatcher</h3>
+          <div class="form-group"><label class="form-label">Template</label>
+            <select id="email-preset" class="form-input" onchange="applyEmailTemplate(this.value)">
+              <option value="referral">Specialist Referral Letter</option>
+              <option value="appointment">Appointment Confirmation</option>
+              <option value="leave">Sick Leave Certificate</option>
+              <option value="lab_request">Lab Test Requisition</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Patient Name</label><input type="text" id="email-patient" class="form-input" oninput="applyEmailTemplate(document.getElementById('email-preset').value)"></div>
+          <div class="form-group"><label class="form-label">Doctor</label><input type="text" id="email-doctor" class="form-input" oninput="applyEmailTemplate(document.getElementById('email-preset').value)"></div>
+          <div class="form-group"><label class="form-label">Recipient Email</label><input type="email" id="email-to" class="form-input"></div>
+          <div style="display:flex; gap:10px; margin-top:14px;">
+            <button class="btn btn-cyan" style="flex:1;" onclick="sendEmailAction()">📤 Open in Email App</button>
+            <button class="btn btn-outline" onclick="copyEmailDraft()">📋 Copy</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label">AI Generated Draft</label>
+          <div class="form-group">
+            <input type="text" id="email-subject" class="form-input" style="font-weight:700; margin-bottom:8px;">
+            <textarea id="email-body" class="form-input"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+// CLINIC & USER CONFIG — stored in localStorage for multi-clinic SaaS
+// =====================================================================
+// MULTI-TENANT CLINIC REGISTRY & SAAS STORAGE
+// =====================================================================
+function normalizePhone(p) {
+  if (!p) return "";
+  return String(p).replace(/[^0-9+]/g, '');
+}
+
+const DEFAULT_CLINICS = {
+  "+919351010561": {
+    clinicName: "Monica Dental Clinic",
+    clinicPhone: "+91 9351010561",
+    doctorName: "Dr. Monica Sharma",
+    specialty: "Dental Surgeon & Implantologist",
+    clinicAddress: "Shop 4, Sunrise Plaza, Sector 18, Noida",
+    feeGeneral: "₹500",
+    feeSpecialist: "₹1200",
+    timeMorning: "9:30 AM - 1:30 PM",
+    timeEvening: "5:00 PM - 8:30 PM",
+    doctors: [
+      { name: "Dr. Monica Sharma", specialty: "Dental Surgeon & Implantologist", room: "Room 1" },
+      { name: "Dr. Arjun Kapoor", specialty: "Orthodontist", room: "Room 2" }
+    ],
+    callHistory: [
+      {
+        name: "Rohan Verma",
+        phone: "+91 98765-11223",
+        duration: "01:14",
+        intent: "Appointment Booking",
+        outcome: "Token #1 Confirmed",
+        transcript: [
+          { sender: "Aegis AI", time: "10:14:02 AM", text: "Namaste! Thank you for calling Monica Dental Clinic on +91 9351010561. I am Aegis, your clinical AI receptionist. How can I help you today?" },
+          { sender: "Caller (Rohan Verma)", time: "10:14:12 AM", text: "Hi, I have severe molar toothache since yesterday. Can I get an appointment with Dr. Monica Sharma today?" },
+          { sender: "Aegis AI", time: "10:14:24 AM", text: "I understand, Rohan. Dr. Monica Sharma is on duty today. I have booked your priority token #1 in Room 1. We have dispatched a confirmation SMS to your number." },
+          { sender: "Caller (Rohan Verma)", time: "10:14:38 AM", text: "Thank you so much! What are the consultation charges?" },
+          { sender: "Aegis AI", time: "10:14:46 AM", text: "Dental consultation is 500 rupees. We accept UPI, Google Pay, cards, and cash. Please arrive 10 minutes early." },
+          { sender: "Caller (Rohan Verma)", time: "10:15:01 AM", text: "Perfect, see you at 10 AM. Goodbye." },
+          { sender: "Aegis AI", time: "10:15:08 AM", text: "Thank you for calling Monica Dental Clinic. Wishing you a quick recovery. Goodbye!" }
+        ]
+      },
+      {
+        name: "Sunita Rao",
+        phone: "+91 99887-33445",
+        duration: "00:46",
+        intent: "Fee & Timing Inquiry",
+        outcome: "Fees Quoted",
+        transcript: [
+          { sender: "Aegis AI", time: "11:02:10 AM", text: "Namaste! Thank you for calling Monica Dental Clinic on +91 9351010561. How can I assist you with your dental care today?" },
+          { sender: "Caller (Sunita Rao)", time: "11:02:18 AM", text: "Hello, what are your clinic timings for evening OPD, and what is the fee for teeth cleaning and scaling?" },
+          { sender: "Aegis AI", time: "11:02:29 AM", text: "Monica Dental Clinic is open this evening from 5:00 PM to 8:30 PM. Routine dental checkup is 500 rupees, and dental scaling starts from 1200 rupees. Would you like to reserve a slot?" },
+          { sender: "Caller (Sunita Rao)", time: "11:02:45 AM", text: "Okay, I will come around 6:00 PM today. Thank you!" },
+          { sender: "Aegis AI", time: "11:02:51 AM", text: "You are most welcome! We look forward to seeing you at 6:00 PM. Have a wonderful day!" }
+        ]
+      }
+    ]
+  },
+  "+919811122334": {
+    clinicName: "Apex Dental Care",
+    clinicPhone: "+91 98111 22334",
+    doctorName: "Dr. Rohan Mehra",
+    specialty: "Maxillofacial Surgeon",
+    clinicAddress: "Apex Tower, 2nd Floor, MG Road, Gurugram",
+    feeGeneral: "₹600",
+    feeSpecialist: "₹1500",
+    timeMorning: "10:00 AM - 2:00 PM",
+    timeEvening: "6:00 PM - 9:00 PM",
+    doctors: [
+      { name: "Dr. Rohan Mehra", specialty: "Maxillofacial Surgeon", room: "Room 101" },
+      { name: "Dr. Neha Sen", specialty: "Pediatric Dentist", room: "Room 102" }
+    ],
+    callHistory: [
+      {
+        name: "Vikram Malhotra",
+        phone: "+91 98222-77889",
+        duration: "00:58",
+        intent: "Root Canal Inquiry",
+        outcome: "Appointment Booked",
+        transcript: [
+          { sender: "Aegis AI", time: "09:30:15 AM", text: "Namaste! Thank you for calling Apex Dental Care on +91 98111 22334. I am Aegis, your clinical AI receptionist. How can I help you today?" },
+          { sender: "Caller (Vikram Malhotra)", time: "09:30:25 AM", text: "Hello, is Dr. Rohan Mehra available for root canal treatment today?" },
+          { sender: "Aegis AI", time: "09:30:38 AM", text: "Yes, Vikram. Dr. Rohan Mehra is consulting today from 10:00 AM in Room 101. I have reserved your priority token. A confirmation SMS has been dispatched." },
+          { sender: "Caller (Vikram Malhotra)", time: "09:30:50 AM", text: "Great, what is the root canal consultation charge?" },
+          { sender: "Aegis AI", time: "09:30:56 AM", text: "Specialist consultation is 1500 rupees. We accept cards, cash, and UPI." },
+          { sender: "Caller (Vikram Malhotra)", time: "09:31:02 AM", text: "Okay, thank you!" },
+          { sender: "Aegis AI", time: "09:31:07 AM", text: "Thank you for calling Apex Dental Care. Have a great day!" }
+        ]
+      }
+    ]
+  }
+};
+
+function getClinicsDB() {
+  try {
+    const raw = localStorage.getItem('aegis_clinics_db');
+    if (raw) return { ...DEFAULT_CLINICS, ...JSON.parse(raw) };
+  } catch(e) {}
+  return { ...DEFAULT_CLINICS };
+}
+
+function saveClinicsDB(db) {
+  try {
+    localStorage.setItem('aegis_clinics_db', JSON.stringify(db));
+  } catch(e) {}
+}
+
+function syncClinicToBackend(clinicObj) {
+  try {
+    // 1. Sync telephony active line
+    fetch('/api/telephony/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: clinicObj.clinicPhone,
+        clinicName: clinicObj.clinicName,
+        doctorName: clinicObj.doctorName || (clinicObj.doctors && clinicObj.doctors[0] ? clinicObj.doctors[0].name : "Doctor")
+      })
+    }).catch(()=>{});
+
+    // 2. Persist full clinic profile into server disk database (clinics_database.json)
+    fetch('/api/clinics/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clinicObj)
+    }).catch(()=>{});
+  } catch(e) {}
+}
+
+let activeUser = { name: "Dr. Monica Sharma", email: "monica@dentalclinic.com", clinicName: "Monica Dental Clinic", phone: "+91 9351010561" };
+let C = { ...DEFAULT_CLINICS["+919351010561"] }; // Active clinic config
+let queue = [];
+let tokenSeq = 0;
+let masterExcelRows = [];
+
+function saveConfig() { localStorage.setItem('aegis_clinic_config', JSON.stringify(C)); }
+function loadConfig() {
+  const raw = localStorage.getItem('aegis_clinic_config');
+  if (raw) { try { C = JSON.parse(raw); return true; } catch(e) {} }
+  return false;
+}
+
+// =====================================================================
+// AUTH & REGISTRATION LOGIC (Multi-tenant by Phone Number)
+// =====================================================================
+function showAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t, i) => {
+    t.classList.toggle('active', (tab === 'signup' && i === 0) || (tab === 'login' && i === 1));
+  });
+  document.getElementById('auth-signup').style.display = tab === 'signup' ? 'block' : 'none';
+  document.getElementById('auth-login').style.display = tab === 'login' ? 'block' : 'none';
+}
+
+function loginWithSpecificPhone(phoneInput) {
+  if (!phoneInput || !phoneInput.trim()) {
+    phoneInput = "+91 9351010561";
+  }
+  const norm = normalizePhone(phoneInput);
+  const db = getClinicsDB();
+
+  // Find matching clinic in registry
+  let matchedKey = null;
+  const rawDigits = norm.replace(/\D/g, '').slice(-10);
+  for (const k in db) {
+    if (k === norm || k.replace(/\D/g, '').slice(-10) === rawDigits) {
+      matchedKey = k;
+      break;
+    }
+  }
+
+  let clinicData = matchedKey ? db[matchedKey] : null;
+
+  if (!clinicData) {
+    // If a brand new clinic signs in with custom phone, create clean clinic entry!
+    const displayPhone = phoneInput.trim().startsWith('+') ? phoneInput.trim() : ('+91 ' + phoneInput.trim());
+    clinicData = {
+      clinicName: "My Healthcare Clinic",
+      clinicPhone: displayPhone,
+      doctorName: "Chief Doctor",
+      specialty: "General & Specialist Practice",
+      clinicAddress: "Medical Center, Sector 1",
+      feeGeneral: "₹500",
+      feeSpecialist: "₹1000",
+      timeMorning: "9:30 AM - 1:30 PM",
+      timeEvening: "5:00 PM - 8:30 PM",
+      doctors: [
+        { name: "Chief Doctor", specialty: "General OPD", room: "Room 1" }
+      ],
+      callHistory: []
+    };
+    db[norm || "+919351010561"] = clinicData;
+    saveClinicsDB(db);
+  }
+
+  // Bind active clinic and doctor
+  C = JSON.parse(JSON.stringify(clinicData));
+  activeUser = {
+    name: C.doctorName || (C.doctors && C.doctors[0] ? C.doctors[0].name : "Doctor"),
+    email: `${(C.clinicName || 'clinic').toLowerCase().replace(/[^a-z0-9]/g,'')}@care.com`,
+    clinicName: C.clinicName,
+    phone: C.clinicPhone
+  };
+
+  localStorage.setItem('aegis_active_phone', C.clinicPhone);
+  localStorage.setItem('aegis_active_user', JSON.stringify(activeUser));
+  saveConfig();
+
+  // Reset live queue cleanly for this clinic session - starting at Token #1!
+  queue = [];
+  tokenSeq = 0;
+  callHistoryRecords = (C.callHistory && C.callHistory.length > 0) ? [...C.callHistory] : [];
+
+  // Re-render UI everywhere
+  applyConfigToUI();
+  syncClinicToBackend(C);
+
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('setup-wizard').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+
+  renderVoiceQueue();
+  speakVoice(`Welcome to Aegis AI. ${C.clinicName} is connected to hotline ${C.clinicPhone}.`);
+}
+
+function handleLogin() {
+  const phoneInput = document.getElementById('login-phone').value.trim();
+  if (!phoneInput) {
+    alert("Please enter your clinic mobile number.");
+    return;
+  }
+  loginWithSpecificPhone(phoneInput);
+}
+
+function handleSignUp() {
+  const name = document.getElementById('reg-name').value.trim() || "Dr. Monica Sharma";
+  const clinic = document.getElementById('reg-clinic').value.trim() || "Monica Dental Clinic";
+  const phone = document.getElementById('reg-phone').value.trim() || "+91 9351010561";
+  const spec = document.getElementById('reg-spec').value.trim() || "Dental Care & Surgery";
+  const email = document.getElementById('reg-email').value.trim() || "monica@dentalclinic.com";
+
+  const norm = normalizePhone(phone);
+  const db = getClinicsDB();
+
+  const newClinic = {
+    clinicName: clinic,
+    clinicPhone: phone,
+    doctorName: name,
+    specialty: spec,
+    clinicAddress: "Main Clinic Centre",
+    feeGeneral: "₹500",
+    feeSpecialist: "₹1000",
+    timeMorning: "9:30 AM - 1:30 PM",
+    timeEvening: "5:00 PM - 8:30 PM",
+    doctors: [
+      { name: name, specialty: spec, room: "Room 1" },
+      { name: "Dr. Consulting Specialist", specialty: "Consultant", room: "Room 2" }
+    ],
+    callHistory: []
+  };
+
+  db[norm] = newClinic;
+  saveClinicsDB(db);
+
+  loginWithSpecificPhone(phone);
+
+  // Trigger automated notification prompt for Twilio setup
+  triggerTwilioSignupNotification(clinic, phone, name);
+}
+
+function triggerTwilioSignupNotification(clinic, phone, doctor) {
+  setTimeout(() => {
+    const titleEl = document.getElementById('tw-prompt-clinic-name');
+    const phoneEl = document.getElementById('tw-prompt-phone');
+    if (titleEl) titleEl.innerText = `Connect Real Phone Calls to ${clinic}?`;
+    if (phoneEl) phoneEl.innerText = phone;
+    const modal = document.getElementById('twilio-signup-prompt-modal');
+    if (modal) modal.style.display = 'flex';
+    playSciFiChime();
+    speakVoice(`Welcome ${doctor}! Clinic registered. Would you like to connect Twilio AI calls to ${phone}?`);
+  }, 700);
+}
+
+function acceptTwilioSetup() {
+  closeTwilioPromptModal();
+  openTwilioModal();
+  speakVoice(`Setting up Twilio cloud telephony for ${C.clinicName}. Enter your credentials to activate real phone calls.`);
+}
+
+function declineTwilioSetup() {
+  closeTwilioPromptModal();
+  speakVoice(`Welcome to ${C.clinicName}. In-browser softphone and hands-free desk are active.`);
+}
+
+function closeTwilioPromptModal() {
+  const m = document.getElementById('twilio-signup-prompt-modal');
+  if (m) m.style.display = 'none';
+}
+
+function handleLogout() {
+  localStorage.removeItem('aegis_active_phone');
+  localStorage.removeItem('aegis_active_user');
+  document.getElementById('main-app').style.display = 'none';
+  document.getElementById('setup-wizard').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+  if (recognition) try { recognition.stop(); } catch(e) {}
+  if (synth) synth.cancel();
+}
+
+// =====================================================================
+// ALL-IN-ONE TWILIO TELEPHONY INTEGRATION
+// =====================================================================
+function openTwilioModal() {
+  if (document.getElementById('tw-carrier-sim')) {
+    document.getElementById('tw-carrier-sim').innerText = C.clinicPhone || "+91 9351010561";
+  }
+  document.getElementById('tw-account-sid').value = localStorage.getItem('aegis_twilio_sid') || "";
+  document.getElementById('tw-auth-token').value = localStorage.getItem('aegis_twilio_token') || "";
+  document.getElementById('tw-phone-number').value = localStorage.getItem('aegis_twilio_phone') || "";
+  document.getElementById('tw-public-url').value = localStorage.getItem('aegis_public_url') || "";
+
+  fetch('/api/telephony/status')
+    .then(r => r.json())
+    .then(data => {
+      if (data.twilio_connected) {
+        document.getElementById('tw-status-dot').style.background = '#22c55e';
+        document.getElementById('tw-status-text').style.color = '#22c55e';
+        document.getElementById('tw-status-text').innerText = 'Twilio Connected & Live';
+        document.getElementById('tw-phone-badge').innerText = data.twilio_phone || 'Active';
+        if (data.twilio_phone && !document.getElementById('tw-phone-number').value) {
+          document.getElementById('tw-phone-number').value = data.twilio_phone;
+        }
+      } else {
+        document.getElementById('tw-status-dot').style.background = '#fbbf24';
+        document.getElementById('tw-status-text').style.color = '#fbbf24';
+        document.getElementById('tw-status-text').innerText = 'Ready to Connect';
+        document.getElementById('tw-phone-badge').innerText = 'No Twilio line';
+      }
+    })
+    .catch(() => {});
+
+  document.getElementById('twilio-modal').style.display = 'flex';
+}
+
+function closeTwilioModal() {
+  document.getElementById('twilio-modal').style.display = 'none';
+}
+
+function handleTwilioAutoConfigure() {
+  const sid = document.getElementById('tw-account-sid').value.trim();
+  const token = document.getElementById('tw-auth-token').value.trim();
+  const phone = document.getElementById('tw-phone-number').value.trim();
+  const url = document.getElementById('tw-public-url').value.trim();
+
+  if (!sid || !token) {
+    alert("Please enter your Twilio Account SID and Auth Token.\n(Found in your Twilio Console at console.twilio.com)");
+    return;
+  }
+
+  localStorage.setItem('aegis_twilio_sid', sid);
+  localStorage.setItem('aegis_twilio_token', token);
+  if (phone) localStorage.setItem('aegis_twilio_phone', phone);
+  if (url) localStorage.setItem('aegis_public_url', url);
+
+  document.getElementById('tw-status-text').innerText = "Connecting to Twilio API...";
+  document.getElementById('tw-status-dot').style.background = "#38bdf8";
+
+  fetch('/api/twilio/auto_configure', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account_sid: sid, auth_token: token, public_url: url })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.error) {
+      alert("Twilio Notice: " + res.error);
+      document.getElementById('tw-status-text').innerText = "Setup Notice: " + res.error;
+      document.getElementById('tw-status-dot').style.background = "#ef4444";
+    } else {
+      document.getElementById('tw-status-dot').style.background = '#22c55e';
+      document.getElementById('tw-status-text').style.color = '#22c55e';
+      document.getElementById('tw-status-text').innerText = 'Twilio Auto-Configured & Ready!';
+      if (res.active_number) {
+        document.getElementById('tw-phone-badge').innerText = res.active_number;
+        document.getElementById('tw-phone-number').value = res.active_number;
+        localStorage.setItem('aegis_twilio_phone', res.active_number);
+      }
+      alert(`🎉 Twilio successfully configured!\nInbound calls to ${res.active_number || 'your Twilio line'} are now answered by ${C.clinicName}'s AI receptionist.`);
+    }
+  })
+  .catch(err => {
+    alert("Saved credentials locally! " + err.message);
+  });
+}
+
+function handleTwilioOutboundTest() {
+  const target = prompt(`Enter phone number to ring for test call:`, C.clinicPhone || "+91 9351010561");
+  if (!target) return;
+
+  fetch('/api/twilio/test_call', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to_phone: target })
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.error) {
+      alert("Test Call Error: " + res.error);
+    } else {
+      alert(`📞 Outbound call placed to ${target}!\nYour phone will ring shortly. Answer it to speak with Aegis AI.`);
+    }
+  })
+  .catch(err => {
+    alert("Start reception_server.py first to place calls: " + err.message);
+  });
+}
+
+function fetchServerRecentCalls() {
+  fetch('/api/calls/recent')
+    .then(r => r.json())
+    .then(serverCalls => {
+      if (Array.isArray(serverCalls) && serverCalls.length > 0) {
+        serverCalls.forEach(sc => {
+          if (!callHistoryRecords.some(r => r.phone === sc.phone && r.duration === sc.duration)) {
+            callHistoryRecords.unshift(sc);
+          }
+        });
+        renderCallLogs();
+      }
+    })
+    .catch(() => {});
+}
+
+function goToStep(step) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.setup-step').forEach((s, idx) => {
+    s.classList.toggle('active', idx === step - 1);
+    s.classList.toggle('done', idx < step - 1);
+  });
+  const target = document.getElementById('step-' + step);
+  if (target) target.classList.add('active');
+
+  if (step === 3) {
+    const cname = document.getElementById('s-clinic-name').value.trim() || C.clinicName || "Your Clinic";
+    const cphone = document.getElementById('s-clinic-phone').value.trim() || C.clinicPhone || "";
+    document.getElementById('welcome-summary').innerHTML = `
+      <strong>${cname}</strong> is configured.<br>
+      Hotline: <span style="color:var(--cyan);">${cphone}</span> • Voice Desk & Call AI ready.
+    `;
+  }
+}
+
+// =====================================================================
+// SETUP WIZARD & CLINIC PROFILE
+// =====================================================================
+let docCounter = 1;
+function addDoctorRow() {
+  docCounter++;
+  const div = document.createElement('div');
+  div.className = 'doc-entry';
+  div.innerHTML = `
+    <div><label class="setup-label">Doctor Name</label><input class="setup-input doc-name" placeholder="e.g. Dr. Rahul Verma"></div>
+    <div><label class="setup-label">Specialty</label><input class="setup-input doc-spec" placeholder="e.g. Orthodontist"></div>
+    <div><label class="setup-label">Room</label><input class="setup-input doc-room" placeholder="Room ${docCounter}" value="Room ${docCounter}"></div>
+    <button class="doc-remove-btn" onclick="this.parentElement.remove()" title="Remove">✕</button>
+  `;
+  document.getElementById('doctors-list').appendChild(div);
+}
+
+function launchAegis() {
+  const name = document.getElementById('s-clinic-name').value.trim() || C.clinicName;
+  const phone = document.getElementById('s-clinic-phone').value.trim() || C.clinicPhone;
+  if (!name) { alert("Please enter your clinic name."); return; }
+
+  C.clinicName = name;
+  C.clinicPhone = phone;
+  C.clinicAddress = document.getElementById('s-clinic-address').value.trim();
+  C.feeGeneral = document.getElementById('s-fee-general').value.trim() || "₹500";
+  C.feeSpecialist = document.getElementById('s-fee-specialist').value.trim() || "₹1000";
+  C.timeMorning = document.getElementById('s-time-morning').value.trim();
+  C.timeEvening = document.getElementById('s-time-evening').value.trim();
+
+  C.doctors = [];
+  document.querySelectorAll('.doc-entry').forEach(row => {
+    const dname = row.querySelector('.doc-name').value.trim();
+    const dspec = row.querySelector('.doc-spec').value.trim();
+    const droom = row.querySelector('.doc-room').value.trim();
+    if (dname) C.doctors.push({ name: dname, specialty: dspec, room: droom || "Room 1" });
+  });
+
+  if (C.doctors.length === 0) {
+    C.doctors.push({ name: activeUser.name || "Doctor", specialty: "General OPD", room: "Room 1" });
+  }
+
+  saveConfig();
+  applyConfigToUI();
+  document.getElementById('setup-wizard').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+}
+
+function openSetup() {
+  document.getElementById('s-clinic-name').value = C.clinicName;
+  document.getElementById('s-clinic-phone').value = C.clinicPhone;
+  document.getElementById('s-clinic-address').value = C.clinicAddress;
+  document.getElementById('s-fee-general').value = C.feeGeneral;
+  document.getElementById('s-fee-specialist').value = C.feeSpecialist;
+  document.getElementById('s-time-morning').value = C.timeMorning;
+  document.getElementById('s-time-evening').value = C.timeEvening;
+
+  const list = document.getElementById('doctors-list');
+  list.innerHTML = '';
+  C.doctors.forEach((d) => {
+    const div = document.createElement('div');
+    div.className = 'doc-entry';
+    div.innerHTML = `
+      <div><label class="setup-label">Doctor Name</label><input class="setup-input doc-name" value="${d.name}"></div>
+      <div><label class="setup-label">Specialty</label><input class="setup-input doc-spec" value="${d.specialty}"></div>
+      <div><label class="setup-label">Room</label><input class="setup-input doc-room" value="${d.room}"></div>
+      <button class="doc-remove-btn" onclick="this.parentElement.remove()">✕</button>
+    `;
+    list.appendChild(div);
+  });
+
+  goToStep(1);
+  document.getElementById('setup-wizard').style.display = 'flex';
+  document.getElementById('main-app').style.display = 'none';
+}
+
+// =====================================================================
+// APPLY CONFIG TO ALL MODULES
+// =====================================================================
+function applyConfigToUI() {
+  // Header
+  document.getElementById('header-clinic-name').innerText = C.clinicName.toUpperCase();
+  document.getElementById('header-subtitle').innerText = `Hotline Connected: ${C.clinicPhone} • Powered by Aegis AI`;
+  document.title = `${C.clinicName} — Aegis AI`;
+  if (document.getElementById('user-display-name')) {
+    document.getElementById('user-display-name').innerText = activeUser.name || (C.doctors && C.doctors[0] ? C.doctors[0].name : "Doctor");
+  }
+
+  // Voice desk info
+  document.getElementById('voice-clinic-info').innerText = `${C.clinicName} • Speak patient name and doctor to issue tokens instantly.`;
+
+  // Build voice command chips dynamically from clinic's doctors
+  const chipBox = document.getElementById('voice-cmd-chips');
+  chipBox.innerHTML = '';
+  if (C.doctors && C.doctors.length > 0) {
+    const d1 = C.doctors[0];
+    chipBox.innerHTML += `<div class="cmd-chip" onclick="simulateVoice('Token for Rahul with ${d1.name}')"><span>🗣️ "Token for Rahul with <strong>${d1.name.split(' ').pop()}</strong>"</span><span style="color:var(--cyan);">→</span></div>`;
+  }
+  if (C.doctors && C.doctors.length > 1) {
+    const d2 = C.doctors[1];
+    chipBox.innerHTML += `<div class="cmd-chip" onclick="simulateVoice('for Priya with ${d2.name}')"><span>🗣️ "for Priya with <strong>${d2.name.split(' ').pop()}</strong>"</span><span style="color:var(--cyan);">→</span></div>`;
+  }
+  chipBox.innerHTML += `<div class="cmd-chip" onclick="simulateVoice('for Anubhav')"><span>🗣️ "<strong>for Anubhav</strong>"</span><span style="color:var(--cyan);">→</span></div>`;
+  chipBox.innerHTML += `<div class="cmd-chip" onclick="simulateVoice('Call next patient')"><span>📢 "<strong>Call next patient</strong>"</span><span style="color:#22c55e;">Call</span></div>`;
+
+  // Call desk phone & SIM drawer
+  const phone = C.clinicPhone || "+91 9351010561";
+  document.getElementById('call-clinic-phone').innerText = `Hotline: ${phone}`;
+  if (document.getElementById('btn-phone-display')) {
+    document.getElementById('btn-phone-display').innerText = phone;
+  }
+  if (document.getElementById('guide-phone-title')) {
+    document.getElementById('guide-phone-title').innerText = phone;
+  }
+  if (document.getElementById('guide-phone-sim')) {
+    document.getElementById('guide-phone-sim').innerText = phone;
+  }
+  if (document.getElementById('guide-phone-server')) {
+    document.getElementById('guide-phone-server').innerText = `http://127.0.0.1:8080/api/twilio/voice?phone=${encodeURIComponent(phone)}`;
+  }
+  if (document.getElementById('modal-transcript-sub')) {
+    document.getElementById('modal-transcript-sub').innerText = `Hotline: ${phone}`;
+  }
+
+  // Call test chips
+  const callChips = document.getElementById('call-test-chips');
+  const d1Name = (C.doctors && C.doctors[0]) ? C.doctors[0].name : "the doctor";
+  callChips.innerHTML = `
+    <div class="cmd-chip" onclick="simulateCallerSpeech('I want to book an appointment with ${d1Name} for tomorrow')"><span>🗣️ "Book appointment with ${d1Name.split(' ').pop()}"</span><span style="color:#22c55e;">📅</span></div>
+    <div class="cmd-chip" onclick="simulateCallerSpeech('What are your clinic timings today?')"><span>🗣️ "Clinic timings?"</span><span style="color:var(--cyan);">🕒</span></div>
+    <div class="cmd-chip" onclick="simulateCallerSpeech('How much is the consultation fee?')"><span>🗣️ "Consultation fee?"</span><span style="color:var(--amber);">💵</span></div>
+    <div class="cmd-chip" onclick="simulateCallerSpeech('Emergency! Severe pain, need immediate help')"><span>🚨 "Emergency pain!"</span><span style="color:#ef4444;">🚨</span></div>
+  `;
+
+  // WhatsApp — build dynamic chats based on clinic
+  buildWhatsAppChats();
+
+  // Call Logs & Transcripts
+  renderCallLogs();
+
+  // Email defaults
+  document.getElementById('email-doctor').value = (C.doctors && C.doctors[0]) ? C.doctors[0].name : '';
+  applyEmailTemplate('referral');
+}
+
+// =====================================================================
+// AUDIO
+// =====================================================================
+let audioCtx = null;
+function getAudioCtx() { if (!audioCtx) { const A = window.AudioContext || window.webkitAudioContext; if (A) audioCtx = new A(); } return audioCtx; }
+function playSciFiChime() {
+  try { const ctx = getAudioCtx(); if(!ctx)return; const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.setValueAtTime(587.33,ctx.currentTime); o.frequency.exponentialRampToValueAtTime(880,ctx.currentTime+0.12); o.frequency.exponentialRampToValueAtTime(1174.66,ctx.currentTime+0.25); g.gain.setValueAtTime(0.18,ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.35); o.start(ctx.currentTime); o.stop(ctx.currentTime+0.36); } catch(e){}
+}
+let ringInterval = null;
+function startPhoneRing() { stopPhoneRing(); const ctx=getAudioCtx(); if(!ctx)return; const burst=()=>{try{const o1=ctx.createOscillator(),o2=ctx.createOscillator(),g=ctx.createGain();o1.type='sine';o2.type='sine';o1.frequency.setValueAtTime(440,ctx.currentTime);o2.frequency.setValueAtTime(480,ctx.currentTime);o1.connect(g);o2.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.12,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+1.6);o1.start(ctx.currentTime);o2.start(ctx.currentTime);o1.stop(ctx.currentTime+1.65);o2.stop(ctx.currentTime+1.65);}catch(e){}}; burst(); ringInterval=setInterval(burst,3200); }
+function stopPhoneRing() { if(ringInterval){clearInterval(ringInterval);ringInterval=null;} }
+
+// =====================================================================
+// HUD TAB NAVIGATION
+// =====================================================================
+function switchHudTab(t) {
+  document.querySelectorAll('.tab-module').forEach(m=>m.classList.remove('active'));
+  document.querySelectorAll('.hud-tab-btn').forEach(b=>b.classList.remove('active'));
+  const mod=document.getElementById('module-'+t); if(mod)mod.classList.add('active');
+  const btn=Array.from(document.querySelectorAll('.hud-tab-btn')).find(b=>b.getAttribute('onclick').includes(t)); if(btn)btn.classList.add('active');
+}
+
+// =====================================================================
+// MODULE 1: VOICE TOKEN ENGINE
+// =====================================================================
+let isVoiceActive=false, isSpeaking=false, recognition=null, activeUtterance=null, watchdogTimer=null;
+const synth = window.speechSynthesis;
+
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRec) {
+  recognition = new SpeechRec();
+  recognition.continuous = true; recognition.interimResults = false; recognition.lang = 'en-IN';
+  recognition.onstart = () => { isVoiceActive=true; document.getElementById('reactor').className='reactor-core listening'; document.getElementById('voice-hud-status').innerText='CORE ONLINE // LISTENING'; };
+  recognition.onresult = (e) => { if(isSpeaking)return; const t=e.results[e.results.length-1][0].transcript.trim(); if(t){ if(isCallActive){handleCallCallerSpeech(t);} else { document.getElementById('voice-heard-box').innerText=`⚡ Heard: "${t}"`; processVoiceInput(t); } } };
+  recognition.onend = () => { if((isVoiceActive||isCallActive)&&!isSpeaking) try{recognition.start();}catch(e){} };
+  recognition.onerror = () => { if((isVoiceActive||isCallActive)&&!isSpeaking) setTimeout(()=>{try{recognition.start();}catch(e){}},300); };
+}
+
+function toggleVoice() {
+  if(isVoiceActive){isVoiceActive=false;if(recognition)try{recognition.stop();}catch(e){}if(synth)synth.cancel();isSpeaking=false;document.getElementById('reactor').className='reactor-core';document.getElementById('voice-hud-status').innerText='STANDBY // CLICK CORE';}
+  else{isVoiceActive=true;if(recognition)try{recognition.start();}catch(e){}speakVoice(`${C.clinicName} Aegis online. Listening.`);}
+}
+
+window.addEventListener('keydown',(e)=>{if(e.code==='Space'&&e.target.tagName!=='INPUT'&&e.target.tagName!=='TEXTAREA'){e.preventDefault();toggleVoice();}});
+
+function processVoiceInput(text) {
+  const lower = text.toLowerCase();
+  if((lower.includes('call desk')||lower.includes('phone desk'))&&!lower.includes('call next')){switchHudTab('calls');speakVoice("Switching to call desk.");return;}
+  if(lower.includes('whatsapp')||lower.includes('chat')){switchHudTab('whatsapp');speakVoice("Switching to WhatsApp.");return;}
+  if(lower.includes('excel')||lower.includes('sheet')){switchHudTab('excel');speakVoice("Opening Excel hub.");return;}
+  if(lower.includes('email')||lower.includes('mail')){switchHudTab('email');speakVoice("Opening email module.");return;}
+  if(lower.includes('call next')||lower.includes('next patient')){callNextVoice();return;}
+
+  // Detect doctor from clinic config
+  let doctor = C.doctors[0]?.name || "Doctor";
+  let room = C.doctors[0]?.room || "Room 1";
+  for (const d of C.doctors) {
+    const dLower = d.name.toLowerCase();
+    const parts = dLower.split(/\s+/);
+    if (parts.some(p => p.length > 2 && lower.includes(p))) { doctor = d.name; room = d.room; break; }
+    if (d.specialty && lower.includes(d.specialty.toLowerCase())) { doctor = d.name; room = d.room; break; }
+  }
+
+  // Smart name extraction
+  let cleanName = "";
+  const forMatch = text.match(/(?:for|of|named)\s+([A-Za-z][A-Za-z\s]{1,30})(?:\s+with|\s+dr|\s+doctor|\s+in|\s+room|$)/i);
+  if (forMatch) cleanName = forMatch[1].trim();
+
+  if (!cleanName || cleanName.length < 2) {
+    const afterAction = text.match(/(?:book|token|assign|issue|appointment)\s+(?:an?\s+)?(?:appointment\s+)?(?:for\s+)?([A-Za-z][A-Za-z\s]{1,30})(?:\s+with|\s+dr|\s+doctor|\s+in|\s+room|$)/i);
+    if (afterAction) cleanName = afterAction[1].trim();
+  }
+  if (!cleanName || cleanName.length < 2) {
+    cleanName = text.replace(/aegis|assign|token|issue|book|emergency|urgent|patient|with|dr\..*|doctor.*/gi,'').replace(/please|new|an?|appointment|in|room|ya|yeah|yes|hi|hello|hey|okay|ok|sure|right|\d+/gi,'').replace(/\b(for|of|the|a)\b/gi,'').trim();
+  }
+  if (!cleanName || cleanName.length < 2) cleanName = "Walk-in Patient";
+  else { cleanName = cleanName.split(/\s+/).filter(w=>w.length>1).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' '); if(!cleanName||cleanName.length<2) cleanName="Walk-in Patient"; }
+
+  tokenSeq++;
+  queue.push({ token: tokenSeq, name: cleanName, doc: doctor, room: room, status: "Waiting" });
+  renderVoiceQueue();
+  document.getElementById('active-token-num').innerText = '#' + tokenSeq;
+  document.getElementById('active-patient-name').innerText = cleanName;
+  document.getElementById('active-room').innerText = `${doctor} // ${room}`;
+  document.getElementById('active-broadcast').innerText = `🔊 "Token #${tokenSeq} for ${cleanName}. Proceed to ${room}."`;
+  playSciFiChime();
+  speakVoice(`Token ${tokenSeq} for ${cleanName}. ${doctor}, ${room}.`);
+}
+
+function callNextVoice() {
+  const next=queue.find(q=>q.status==="Waiting");
+  if(next){next.status="Serving";renderVoiceQueue();playSciFiChime();speakVoice(`Calling Token ${next.token}. ${next.name}, please enter ${next.room}.`);}
+  else speakVoice("Queue is clear.");
+}
+
+function speakVoice(text,cb) {
+  if(!('speechSynthesis' in window)){if(cb)cb();return;}
+  synth.cancel();isSpeaking=true;if(watchdogTimer)clearTimeout(watchdogTimer);
+  if(recognition)try{recognition.stop();}catch(e){}
+  const u=new SpeechSynthesisUtterance(text);u.rate=1.0;u.pitch=0.96;activeUtterance=u;
+  u.onstart=()=>{const r=document.getElementById('reactor');if(r)r.className='reactor-core speaking';const s=document.getElementById('voice-hud-status');if(s)s.innerText='SPEAKING...';};
+  const done=()=>{if(watchdogTimer)clearTimeout(watchdogTimer);setTimeout(()=>{isSpeaking=false;if(isVoiceActive||isCallActive){const r=document.getElementById('reactor');if(r)r.className='reactor-core listening';const s=document.getElementById('voice-hud-status');if(s)s.innerText='LISTENING...';if(recognition)try{recognition.start();}catch(e){}}if(cb)cb();},280);};
+  u.onend=done;u.onerror=done;
+  watchdogTimer=setTimeout(done,Math.max(3500,text.length*90));
+  synth.speak(u);
+}
+
+function simulateVoice(cmd){if(!isVoiceActive)toggleVoice();setTimeout(()=>processVoiceInput(cmd),350);}
+
+function renderVoiceQueue() {
+  const tbody=document.getElementById('voice-queue-tbody');
+  if(queue.length===0){document.getElementById('queue-table').style.display='none';document.getElementById('empty-queue-msg').style.display='block';return;}
+  document.getElementById('queue-table').style.display='';document.getElementById('empty-queue-msg').style.display='none';
+  tbody.innerHTML=queue.slice().reverse().map(q=>`<tr><td><strong style="color:var(--cyan);font-family:monospace;">#${q.token}</strong></td><td><strong>${q.name}</strong></td><td>${q.doc} (${q.room})</td><td><span style="color:${q.status==='Serving'?'#4ade80':'#fbbf24'};font-weight:700;">${q.status}</span></td></tr>`).join('');
+}
+
+// =====================================================================
+// MODULE 2: AI CALL DESK
+// =====================================================================
+let isCallRinging=false,isCallActive=false,callTimerInterval=null,callSeconds=0;
+let currentCaller={name:"Patient",phone:""};
+
+function toggleSimGuide() {
+  const g = document.getElementById('real-sim-guide');
+  if (g) g.style.display = g.style.display === 'none' ? 'block' : 'none';
+}
+
+function simulateIncomingCall(){
+  if(isCallRinging||isCallActive)return; isCallRinging=true;
+  currentCaller={name:"Priya Sharma",phone:"+91 98111-55443"};
+  document.getElementById('ringing-caller-name').innerText=`${currentCaller.name} (${currentCaller.phone}) ➔ Calling ${C.clinicPhone}`;
+  document.getElementById('incoming-call-alert').style.display='flex'; startPhoneRing();
+  if(document.getElementById('auto-answer-toggle').checked) setTimeout(()=>{if(isCallRinging)answerCall();},1600);
+}
+
+function answerCall(){
+  stopPhoneRing();isCallRinging=false;isCallActive=true;
+  document.getElementById('incoming-call-alert').style.display='none';
+  document.getElementById('active-call-hud').style.display='block';
+  document.getElementById('active-call-id').innerText=`${currentCaller.name} (${currentCaller.phone})`;
+  callSeconds=0;updateCallTimer();callTimerInterval=setInterval(()=>{callSeconds++;updateCallTimer();},1000);
+  if(recognition)try{recognition.start();}catch(e){}
+  currentCallTranscript = [];
+  const box=document.getElementById('call-transcript-box');box.innerHTML='';
+  const greeting=`Namaste! Thank you for calling ${C.clinicName} on ${C.clinicPhone}. I am Aegis, your clinical AI receptionist. How can I help you today?`;
+  addCallMsg('aegis',greeting);speakVoice(greeting);
+}
+function updateCallTimer(){const m=String(Math.floor(callSeconds/60)).padStart(2,'0'),s=String(callSeconds%60).padStart(2,'0');document.getElementById('call-timer-display').innerText=`${m}:${s}`;}
+function rejectCall(){stopPhoneRing();isCallRinging=false;document.getElementById('incoming-call-alert').style.display='none';}
+let currentCallTranscript = [];
+let callHistoryRecords = [];
+
+let activeModalTranscriptIndex = 0;
+
+function addCallMsg(role, text) {
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const sender = role === 'caller' ? `Caller (${currentCaller.name})` : 'Aegis AI';
+  currentCallTranscript.push({ sender: sender, time: time, text: text });
+
+  const box = document.getElementById('call-transcript-box');
+  const d = document.createElement('div');
+  d.className = `call-msg ${role}`;
+  d.innerHTML = `<strong>${role==='caller'?'📞 '+currentCaller.name:'⚡ Aegis AI'}:</strong> <span style="font-size:0.7rem; color:var(--muted); float:right;">${time}</span><br>${text}`;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function copyCallTranscript() {
+  if (!currentCallTranscript || currentCallTranscript.length === 0) {
+    alert("No active call transcript yet. Click 'Simulate Call' to test!");
+    return;
+  }
+  const fullText = currentCallTranscript.map(m => `[${m.time}] ${m.sender}:\n${m.text}\n`).join('\n');
+  navigator.clipboard.writeText(fullText);
+  alert("Live call transcript copied to clipboard!");
+}
+
+function downloadCallTranscript() {
+  if (!currentCallTranscript || currentCallTranscript.length === 0) {
+    alert("No active call transcript yet. Click 'Simulate Call' to test!");
+    return;
+  }
+  const clinic = C.clinicName || "Clinic";
+  const header = `==========================================================\n`
+               + `AEGIS AI // OFFICIAL CLINIC INBOUND CALL TRANSCRIPT\n`
+               + `Clinic:       ${clinic}\n`
+               + `Connected:    ${C.clinicPhone}\n`
+               + `Caller:       ${currentCaller.name} (${currentCaller.phone})\n`
+               + `Date:         ${new Date().toLocaleDateString()}\n`
+               + `Logged By:    Aegis Autonomous Voice Engine\n`
+               + `==========================================================\n\n`;
+  const body = currentCallTranscript.map(m => `[${m.time}] ${m.sender}:\n${m.text}\n`).join('\n');
+  const blob = new Blob([header + body], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Call_Transcript_${currentCaller.name.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.txt`;
+  a.click();
+}
+
+function hangupCall() {
+  if (!isCallActive) return;
+  isCallActive = false;
+  if (callTimerInterval) clearInterval(callTimerInterval);
+  document.getElementById('active-call-hud').style.display = 'none';
+  const duration = document.getElementById('call-timer-display').innerText;
+
+  addCallMsg('aegis', `Call ended. Thank you for choosing ${C.clinicName}!`);
+  speakVoice(`Thank you for calling ${C.clinicName}. Goodbye.`);
+
+  // Save full transcript into history
+  addCallLog(currentCaller.name, currentCaller.phone, duration, "Inbound Booking", "Resolved", [...currentCallTranscript]);
+}
+
+function addCallLog(name, phone, dur, intent, outcome, transcript) {
+  const record = {
+    name: name,
+    phone: phone || C.clinicPhone,
+    duration: dur || "00:30",
+    intent: intent || "Inbound Call",
+    outcome: outcome || "Resolved",
+    transcript: transcript || [...currentCallTranscript]
+  };
+  callHistoryRecords.unshift(record);
+  renderCallLogs();
+}
+
+function renderCallLogs() {
+  const tbody = document.getElementById('call-logs-tbody');
+  tbody.innerHTML = callHistoryRecords.map((r, i) => `
+    <tr style="cursor:pointer;" onclick="viewCallTranscript(${i})">
+      <td><strong>${r.name}</strong><br><span style="font-size:0.7rem; color:var(--muted);">${r.phone}</span></td>
+      <td>${r.duration}</td>
+      <td style="color:#38bdf8;">${r.intent}</td>
+      <td style="color:#22c55e; font-weight:700;">${r.outcome}</td>
+      <td><button class="btn btn-outline" style="padding:2px 8px; font-size:0.72rem; color:var(--cyan); border-color:var(--border);" onclick="event.stopPropagation(); viewCallTranscript(${i})">👁️ View</button></td>
+    </tr>
+  `).join('');
+}
+
+function viewCallTranscript(index) {
+  activeModalTranscriptIndex = index;
+  const call = callHistoryRecords[index];
+  if (!call) return;
+
+  document.getElementById('modal-transcript-title').innerText = `Call Transcript — ${call.name}`;
+  document.getElementById('modal-transcript-sub').innerText = `Hotline: ${C.clinicPhone} • Caller: ${call.phone} • Duration: ${call.duration} • Status: ${call.outcome}`;
+
+  const body = document.getElementById('modal-transcript-body');
+  if (!call.transcript || call.transcript.length === 0) {
+    body.innerHTML = `<div style="color:var(--muted); text-align:center;">No dialogue recorded for this call.</div>`;
+  } else {
+    body.innerHTML = call.transcript.map(m => `
+      <div style="background:${m.sender.includes('Caller')?'#1e293b':'rgba(0,240,255,0.08)'}; border:1px solid ${m.sender.includes('Caller')?'rgba(255,255,255,0.08)':'var(--border)'}; border-radius:10px; padding:10px 12px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <strong style="color:${m.sender.includes('Caller')?'#38bdf8':'var(--cyan)'}; font-size:0.8rem;">${m.sender}</strong>
+          <span style="font-size:0.7rem; color:var(--muted);">${m.time}</span>
+        </div>
+        <div style="color:#f1f5f9;">${m.text}</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('transcript-modal').style.display = 'flex';
+}
+
+function closeTranscriptModal() {
+  document.getElementById('transcript-modal').style.display = 'none';
+}
+
+function copyModalTranscript() {
+  const call = callHistoryRecords[activeModalTranscriptIndex];
+  if (!call || !call.transcript) return;
+  const text = call.transcript.map(m => `[${m.time}] ${m.sender}:\n${m.text}\n`).join('\n');
+  navigator.clipboard.writeText(text);
+  alert("Transcript copied to clipboard!");
+}
+
+function simulateCallerSpeech(text){if(!isCallActive){answerCall();setTimeout(()=>handleCallCallerSpeech(text),1800);}else handleCallCallerSpeech(text);}
+
+function handleCallCallerSpeech(text){
+  addCallMsg('caller',text);const lower=text.toLowerCase();
+  if(lower.includes('book')||lower.includes('appointment')||lower.includes('token')){
+    tokenSeq++;const doc=C.doctors[0];queue.push({token:tokenSeq,name:currentCaller.name,doc:doc?.name||'Doctor',room:doc?.room||'Room 1',status:"Waiting"});renderVoiceQueue();
+    const r=`Booked! Token #${tokenSeq} with ${doc?.name||'the doctor'} in ${doc?.room||'Room 1'}. Confirmation sent.`;addCallMsg('aegis',r);speakVoice(r);return;
+  }
+  if(lower.includes('timing')||lower.includes('hours')||lower.includes('open')||lower.includes('time')){
+    const r=`${C.clinicName} is open Morning ${C.timeMorning} and Evening ${C.timeEvening}.`;addCallMsg('aegis',r);speakVoice(r);return;
+  }
+  if(lower.includes('fee')||lower.includes('charge')||lower.includes('cost')){
+    const r=`General consultation is ${C.feeGeneral}. Specialist consultation is ${C.feeSpecialist}. We accept cards, cash, and UPI.`;addCallMsg('aegis',r);speakVoice(r);return;
+  }
+  if(lower.includes('emergency')||lower.includes('pain')||lower.includes('severe')||lower.includes('urgent')){
+    const r=`Please stay calm. Our emergency desk is open immediately. If critical, please dial 112 right away. I'm alerting our on-duty staff now.`;addCallMsg('aegis',r);speakVoice(r);return;
+  }
+  const fb=`I've noted your inquiry and our front desk will follow up. Would you like me to book a consultation?`;addCallMsg('aegis',fb);speakVoice(fb);
+}
+
+// =====================================================================
+// MODULE 3: WHATSAPP
+// =====================================================================
+let waThreads=[], currentWaIndex=0;
+function buildWhatsAppChats(){
+  const d1 = (C.doctors && C.doctors[0]) ? C.doctors[0].name : 'the doctor';
+  waThreads=[
+    {
+      name: "Rahul Verma (Patient)",
+      phone: "919876511223",
+      inbound: `Hi, is ${d1} available today at ${C.clinicName}?`,
+      aiReply: `Hello Rahul! Yes, ${d1} is available today at ${C.clinicName}. OPD timings: ${C.timeMorning}. Would you like me to book your priority token?`
+    },
+    {
+      name: "Sunita Rao (Inquiry)",
+      phone: "919988733445",
+      inbound: `What is the consultation fee and timings?`,
+      aiReply: `Namaste Sunita! General consultation at ${C.clinicName} is ${C.feeGeneral}, and specialist consultation is ${C.feeSpecialist}. We are open ${C.timeMorning} and ${C.timeEvening}.`
+    },
+    {
+      name: "Amit Patel (Follow-up)",
+      phone: "919811122334",
+      inbound: `Can you confirm my appointment details?`,
+      aiReply: `Hello Amit! Your appointment is confirmed with ${d1} at ${C.clinicName} (${C.clinicPhone}). Please arrive 10 minutes prior.`
+    }
+  ];
+  const container=document.getElementById('wa-chats-container');
+  container.innerHTML=waThreads.map((t,i)=>`<div class="wa-chat-item ${i===0?'active':''}" onclick="loadWaChat(${i})"><div style="display:flex;justify-content:space-between;"><strong>${t.name}</strong><span style="font-size:0.7rem;color:var(--muted);">Today</span></div><div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">"${t.inbound}"</div></div>`).join('');
+  loadWaChat(0);
+}
+function loadWaChat(i){
+  currentWaIndex=i;document.querySelectorAll('.wa-chat-item').forEach((el,j)=>el.classList.toggle('active',j===i));
+  const t=waThreads[i];document.getElementById('wa-active-name').innerText=t.name;
+  document.getElementById('wa-messages-box').innerHTML=`<div class="wa-msg inbound"><strong>${t.name}:</strong><br>${t.inbound}</div>`;
+}
+function generateAiWaReply(){const t=waThreads[currentWaIndex],box=document.getElementById('wa-messages-box'),d=document.createElement('div');d.className='wa-msg ai-outbound';d.innerHTML=`<strong>⚡ Aegis AI:</strong><br>${t.aiReply}`;box.appendChild(d);box.scrollTop=box.scrollHeight;}
+function sendCustomWa(){const inp=document.getElementById('wa-input');if(!inp.value.trim())return;const box=document.getElementById('wa-messages-box'),d=document.createElement('div');d.className='wa-msg ai-outbound';d.innerHTML=`<strong>Receptionist:</strong><br>${inp.value.trim()}`;box.appendChild(d);inp.value='';box.scrollTop=box.scrollHeight;}
+function openWhatsAppWebDirect(){const t=waThreads[currentWaIndex];window.open(`https://web.whatsapp.com/send?phone=${t.phone}&text=${encodeURIComponent(t.aiReply)}`,'_blank');}
+
+// =====================================================================
+// MODULE 4: EXCEL
+// =====================================================================
+function renderExcelTable(rows){
+  const tbody=document.getElementById('excel-tbody'),thRow=document.getElementById('excel-th-row');
+  if(!rows||rows.length===0){thRow.innerHTML='';tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">No data. Upload an Excel or CSV file.</td></tr>`;return;}
+  const keys=Object.keys(rows[0]);
+  thRow.innerHTML=keys.map(k=>`<th>${k}</th>`).join('');
+  tbody.innerHTML=rows.map(r=>`<tr>${keys.map(k=>`<td>${r[k]||'—'}</td>`).join('')}</tr>`).join('');
+}
+function handleExcelUpload(e){const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=(evt)=>{try{if(window.XLSX){const d=new Uint8Array(evt.target.result),wb=XLSX.read(d,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],json=XLSX.utils.sheet_to_json(ws);if(json.length>0){masterExcelRows=json;renderExcelTable(masterExcelRows);alert(`Loaded ${json.length} rows from ${f.name}!`);}}else{const t=new TextDecoder().decode(evt.target.result),lines=t.split('\n').filter(l=>l.trim()),headers=lines[0].split(',').map(h=>h.trim()),rows=lines.slice(1).map(l=>{const v=l.split(',').map(x=>x.trim());let o={};headers.forEach((h,i)=>o[h]=v[i]||'');return o;});masterExcelRows=rows;renderExcelTable(masterExcelRows);}}catch(err){alert("Error: "+err.message);}};reader.readAsArrayBuffer(f);}
+function queryExcelData(){const q=document.getElementById('excel-query-input').value.toLowerCase().trim();if(!q){renderExcelTable(masterExcelRows);return;}const f=masterExcelRows.filter(r=>Object.values(r).some(v=>String(v).toLowerCase().includes(q)));renderExcelTable(f);speakVoice(`Found ${f.length} matching records.`);}
+function resetExcelFilter(){document.getElementById('excel-query-input').value='';renderExcelTable(masterExcelRows);}
+function exportQueueToExcel(){if(!window.XLSX||queue.length===0){alert(queue.length===0?"No patients in queue yet.":"Excel engine loading...");return;}const data=queue.map(q=>({"Token":q.token,"Patient":q.name,"Doctor":q.doc,"Room":q.room,"Status":q.status,"Date":new Date().toLocaleDateString(),"Time":new Date().toLocaleTimeString()}));const ws=XLSX.utils.json_to_sheet(data),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Queue");XLSX.writeFile(wb,`${C.clinicName.replace(/\s+/g,'_')}_Queue_${new Date().toISOString().split('T')[0]}.xlsx`);}
+
+// =====================================================================
+// MODULE 5: EMAIL
+// =====================================================================
+function applyEmailTemplate(type){
+  const patient=document.getElementById('email-patient').value||"Patient";
+  const doctor=document.getElementById('email-doctor').value||C.doctors[0]?.name||"Doctor";
+  const subj=document.getElementById('email-subject'),body=document.getElementById('email-body');
+  const clinic=C.clinicName||"Clinic";const phone=C.clinicPhone||"";const addr=C.clinicAddress||"";
+
+  if(type==='referral'){
+    subj.value=`Medical Referral - Patient: ${patient} — ${clinic}`;
+    body.value=`Dear Consultant,\n\nRE: Referral for ${patient}\n\nI am referring ${patient} for specialist evaluation. The patient presented at ${clinic} with symptoms requiring your expert review.\n\nPlease find records attached.\n\nRegards,\n${doctor}\n${clinic}\n${addr}\n${phone}`;
+  }else if(type==='appointment'){
+    subj.value=`Appointment Confirmation — ${clinic}`;
+    body.value=`Dear ${patient},\n\nYour appointment is confirmed at ${clinic}.\n\nDoctor: ${doctor}\nDate: Tomorrow\nTimings: ${C.timeMorning}\n\nPlease arrive 10 minutes early. For changes, contact us at ${phone}.\n\nBest regards,\n${clinic}\n${addr}`;
+  }else if(type==='leave'){
+    subj.value=`Medical Leave Certificate - ${patient}`;
+    body.value=`TO WHOM IT MAY CONCERN\n\nThis certifies that ${patient} was examined at ${clinic} on ${new Date().toLocaleDateString()} and requires medical leave for 3 days.\n\nFit to resume on: ${new Date(Date.now()+3*86400000).toLocaleDateString()}.\n\n${doctor}\n${clinic}\n${addr}`;
+  }else if(type==='lab_request'){
+    subj.value=`Lab Requisition - ${patient} — ${clinic}`;
+    body.value=`LAB INVESTIGATION ORDER\n\nPatient: ${patient}\nOrdering Doctor: ${doctor}\nDate: ${new Date().toLocaleDateString()}\n\nTests:\n1. CBC with ESR\n2. Blood Glucose\n3. LFT & Creatinine\n4. Urine R/M\n\n${doctor}\n${clinic}`;
+  }
+}
+function copyEmailDraft(){navigator.clipboard.writeText(document.getElementById('email-body').value);alert("Copied!");}
+function sendEmailAction(){const to=document.getElementById('email-to').value,subj=encodeURIComponent(document.getElementById('email-subject').value),body=encodeURIComponent(document.getElementById('email-body').value);window.location.href=`mailto:${to}?subject=${subj}&body=${body}`;}
+
+// =====================================================================
+// BOOT
+// =====================================================================
+window.onload = () => {
+  const activePhone = localStorage.getItem('aegis_active_phone');
+  if (activePhone) {
+    loginWithSpecificPhone(activePhone);
+  } else {
+    document.getElementById('auth-screen').style.display = 'flex';
+    document.getElementById('setup-wizard').style.display = 'none';
+    document.getElementById('main-app').style.display = 'none';
+  }
+  renderExcelTable(masterExcelRows);
+
+  // Poll for real incoming server calls
+  fetchServerRecentCalls();
+  setInterval(fetchServerRecentCalls, 6000);
+};
+</script>
+</body>
+</html>
