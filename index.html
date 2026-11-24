@@ -488,33 +488,33 @@
 
   <div class="auth-logo">
     <span class="logo-icon">⚡</span>
-    <h1>AEGIS AI</h1>
-    <p>AI-Powered Clinic Automation Operating System</p>
+    <h1>CLINICPULSE AI</h1>
+    <p>24/7 AI Voice Receptionist & Autonomous Clinic OS</p>
   </div>
   <div class="auth-card">
     <div class="auth-tabs">
-      <button class="auth-tab active" onclick="showAuthTab('signup')">Create Account</button>
-      <button class="auth-tab" onclick="showAuthTab('login')">Sign In</button>
+      <button class="auth-tab active" onclick="showAuthTab('login')">🔑 Sign In</button>
+      <button class="auth-tab" onclick="showAuthTab('signup')">➕ Register New Clinic</button>
     </div>
 
     <!-- SIGN UP FORM -->
-    <div id="auth-signup">
+    <div id="auth-signup" style="display:none;">
       <h2>Register Your Clinic</h2>
       <p class="auth-sub">Set up your clinic's AI voice receptionist in seconds.</p>
       <div class="setup-row">
         <div>
           <label class="setup-label">Doctor / Owner Name *</label>
-          <input class="setup-input" id="reg-name" placeholder="e.g. Dr. Monica Sharma" value="Dr. Monica Sharma">
+          <input class="setup-input" id="reg-name" placeholder="Doctor / Owner Full Name" >
         </div>
         <div>
           <label class="setup-label">Clinic Name *</label>
-          <input class="setup-input" id="reg-clinic" placeholder="e.g. Monica Dental Clinic" value="Monica Dental Clinic">
+          <input class="setup-input" id="reg-clinic" placeholder="Clinic Name" >
         </div>
       </div>
       <div class="setup-row">
         <div>
           <label class="setup-label">Clinic Mobile Number (AI Connects to this) *</label>
-          <input class="setup-input" id="reg-phone" placeholder="e.g. +91 9351010561" value="+91 9351010561">
+          <input class="setup-input" id="reg-phone" placeholder="+91 98765 43210" >
         </div>
         <div>
           <label class="setup-label">Clinic Specialty (All Medical Fields Supported)</label>
@@ -533,11 +533,11 @@
       <div class="setup-row">
         <div>
           <label class="setup-label">Email Address *</label>
-          <input class="setup-input" id="reg-email" type="email" placeholder="e.g. monica@clinic.com" value="monica@dentalclinic.com">
+          <input class="setup-input" id="reg-email" type="email" placeholder="clinic@example.com" >
         </div>
         <div>
           <label class="setup-label">Password *</label>
-          <input class="setup-input" id="reg-password" type="password" value="clinic123">
+          <input class="setup-input" id="reg-password" type="password" >
         </div>
       </div>
       <button class="launch-btn" onclick="handleSignUp()" style="margin-top:10px;">
@@ -573,8 +573,8 @@
           Walk into any clinic, enter doctor's name, and play their live custom voice demo in 5 seconds:
         </p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
-          <input class="setup-input" id="pitch-doc" placeholder="Doctor Name" value="Dr. Monica" style="padding:6px 10px; font-size:0.78rem;">
-          <input class="setup-input" id="pitch-clinic" placeholder="Clinic Name" value="Monica Dental" style="padding:6px 10px; font-size:0.78rem;">
+          <input class="setup-input" id="pitch-doc" placeholder="Doctor Name (e.g. Dr. Sharma)" style="padding:6px 10px; font-size:0.78rem;">
+          <input class="setup-input" id="pitch-clinic" placeholder="Clinic Name (e.g. LifeCare Clinic)" style="padding:6px 10px; font-size:0.78rem;">
         </div>
         <button type="button" class="btn btn-cyan" onclick="playDoctorPitchDemo()" style="width:100%; justify-content:center; padding:8px; font-size:0.82rem;">
           ▶️ Play Doctor Live AI Voice Greeting
@@ -593,34 +593,34 @@
     </div>
 
     <!-- LOGIN FORM -->
-    <div id="auth-login" style="display:none;">
+    <div id="auth-login" style="display:block;">
       <h2>Clinic Sign In</h2>
       <p class="auth-sub">Enter your clinic's mobile number. Aegis automatically connects to that number.</p>
       <div class="setup-full">
         <label class="setup-label">Clinic Mobile Number *</label>
-        <input class="setup-input" id="login-phone" placeholder="e.g. +91 9351010561" value="+91 9351010561">
+        <input class="setup-input" id="login-phone" placeholder="+91 98765 43210" >
       </div>
       <div class="setup-full">
         <label class="setup-label">Password / PIN</label>
-        <input class="setup-input" id="login-password" type="password" value="clinic123">
+        <input class="setup-input" id="login-password" type="password" >
       </div>
       <button class="launch-btn" onclick="handleLogin()" style="margin-top:8px;">
         📞 Sign In & Connect Number →
       </button>
-      <div class="auth-divider">or quick connect demo numbers</div>
+      <div class="auth-divider">or quick test with demo clinic presets</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
           <button class="btn btn-green" onclick="loginWithSpecificPhone('+91 9351010561')" style="justify-content:center; padding:8px 6px; font-size:0.75rem;">
-            🦷 Monica Dental Clinic
+            🦷 Demo Dental Clinic
           </button>
           <button class="btn btn-outline" onclick="loginWithSpecificPhone('+91 98111 22334')" style="justify-content:center; padding:8px 6px; font-size:0.75rem; border-color:var(--border);">
-            ✨ Apex Skin &amp; Hair
+            ✨ Demo Skin &amp; Hair Clinic
           </button>
           <button class="btn btn-outline" onclick="loginWithSpecificPhone('+91 97722 33445')" style="justify-content:center; padding:8px 6px; font-size:0.75rem; border-color:var(--border);">
-            🩺 Sanjeevani Family OPD
+            🩺 Demo Family OPD
           </button>
           <button class="btn btn-outline" onclick="loginWithSpecificPhone('+91 99887 76655')" style="justify-content:center; padding:8px 6px; font-size:0.75rem; border-color:var(--border);">
-            👶 Little Stars Child Care
+            👶 Demo Pediatric Clinic
           </button>
         </div>
       </div>
@@ -725,7 +725,7 @@
 
       <div class="setup-full">
         <label class="setup-label">Clinic Name *</label>
-        <input class="setup-input" id="s-clinic-name" placeholder="e.g. Monica Dental Clinic">
+        <input class="setup-input" id="s-clinic-name" placeholder="Clinic Name">
       </div>
       <div class="setup-row">
         <div>
@@ -770,7 +770,7 @@
 
       <div id="doctors-list">
         <div class="doc-entry">
-          <div><label class="setup-label">Doctor Name</label><input class="setup-input doc-name" placeholder="e.g. Dr. Monica Sharma"></div>
+          <div><label class="setup-label">Doctor Name</label><input class="setup-input doc-name" placeholder="Doctor / Owner Full Name"></div>
           <div><label class="setup-label">Specialty</label><input class="setup-input doc-spec" placeholder="e.g. Dentist"></div>
           <div><label class="setup-label">Room</label><input class="setup-input doc-room" value="Room 1"></div>
           <button class="doc-remove-btn" onclick="this.parentElement.remove()">✕</button>
@@ -968,7 +968,7 @@
         </div>
         <div style="background:#f0f9ff; border:1px solid #bae6fd; border:1px solid #e2e8f0; padding:6px 12px; border-radius:8px; font-size:0.78rem; display:flex; align-items:center; gap:6px;">
           <span>👤</span>
-          <strong id="user-display-name" style="color:#0284c7;">Dr. Monica</strong>
+          <strong id="user-display-name" style="color:var(--cyan);">Doctor Portal</strong>
         </div>
         <button class="settings-btn" onclick="openSetup()">⚙️ Profile</button>
         <button class="settings-btn" style="color:#ef4444; border-color:rgba(239,68,68,0.4);" onclick="handleLogout()" title="Sign out to register or switch clinic">🚪 Log Out</button>
@@ -1894,11 +1894,14 @@ function loadConfig() {
 // AUTH & REGISTRATION LOGIC (Multi-tenant by Phone Number)
 // =====================================================================
 function showAuthTab(tab) {
-  document.querySelectorAll('.auth-tab').forEach((t, i) => {
-    t.classList.toggle('active', (tab === 'signup' && i === 0) || (tab === 'login' && i === 1));
+  document.querySelectorAll('.auth-tab').forEach(t => {
+    const isLoginBtn = t.getAttribute('onclick')?.includes('login');
+    t.classList.toggle('active', (tab === 'login' && isLoginBtn) || (tab === 'signup' && !isLoginBtn));
   });
-  document.getElementById('auth-signup').style.display = tab === 'signup' ? 'block' : 'none';
-  document.getElementById('auth-login').style.display = tab === 'login' ? 'block' : 'none';
+  const signupEl = document.getElementById('auth-signup');
+  const loginEl = document.getElementById('auth-login');
+  if (signupEl) signupEl.style.display = tab === 'signup' ? 'block' : 'none';
+  if (loginEl) loginEl.style.display = tab === 'login' ? 'block' : 'none';
 }
 
 function loginWithSpecificPhone(phoneInput) {
@@ -2731,14 +2734,14 @@ function sendEmailAction(){const to=document.getElementById('email-to').value,su
 // BOOT
 // =====================================================================
 window.onload = () => {
-  const activePhone = localStorage.getItem('aegis_active_phone');
-  if (activePhone) {
-    loginWithSpecificPhone(activePhone);
-  } else {
-    document.getElementById('auth-screen').style.display = 'flex';
-    document.getElementById('setup-wizard').style.display = 'none';
-    document.getElementById('main-app').style.display = 'none';
-  }
+  // Always present the clean login screen first whenever the link is opened
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('setup-wizard').style.display = 'none';
+  document.getElementById('main-app').style.display = 'none';
+  
+  // Default to Sign In tab
+  showAuthTab('login');
+
   renderExcelTable(masterExcelRows);
 
   // Poll for real incoming server calls
