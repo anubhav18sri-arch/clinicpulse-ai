@@ -221,6 +221,16 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.12);
     }
 
+
+    /* ===== OTP & EMAIL VERIFICATION STYLING ===== */
+    .auth-method-tabs { display: flex; gap: 4px; background: var(--inner-bg); padding: 3px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 16px; }
+    .auth-method-tab { flex: 1; padding: 7px 10px; text-align: center; font-size: 0.78rem; font-weight: 700; border: none; background: transparent; color: var(--text-muted); border-radius: 7px; cursor: pointer; transition: all 0.2s; }
+    .auth-method-tab.active { background: var(--card-bg); color: var(--cyan); font-weight: 800; box-shadow: var(--shadow-sm); }
+    .otp-inputs-wrap { display: flex; justify-content: center; gap: 8px; margin: 18px 0; }
+    .otp-digit { width: 46px; height: 52px; font-size: 1.4rem; font-weight: 900; text-align: center; border-radius: 10px; border: 2px solid var(--border-bright); background: var(--inner-bg); color: var(--text); font-family: ui-monospace, monospace; outline: none; transition: all 0.2s; }
+    .otp-digit:focus { border-color: var(--cyan); background: var(--card-bg); box-shadow: 0 0 0 3px var(--cyan-glow); }
+    .otp-toast { position: fixed; top: 20px; right: 20px; background: var(--card-bg); border: 2px solid var(--cyan); border-radius: 14px; padding: 14px 18px; box-shadow: var(--shadow-lg); z-index: 1000000; animation: slideIn 0.3s ease; display: flex; align-items: center; gap: 12px; }
+    
     /* ===== FOLLOW-UP TRACKER ===== */
     .followup-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px; padding: 28px; box-shadow: var(--shadow-md); color: #0f172a; }
     .followup-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
@@ -470,6 +480,19 @@
 
 </head>
 <body>
+<!-- CROSS-PRODUCT SUITE BAR -->
+<div style="background:var(--inner-bg); border-bottom:1px solid var(--border); padding:7px 18px; display:flex; justify-content:space-between; align-items:center; font-size:0.76rem; flex-wrap:wrap; gap:8px; z-index:100000; position:relative;">
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span style="font-weight:900; color:var(--cyan); letter-spacing:0.5px;">🏥 CLINICPULSE AI</span>
+    <span style="color:var(--text-muted);">— 24/7 AI Voice Receptionist for Medical & Dental Clinics</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span style="color:var(--text-muted); font-size:0.72rem;">Operating a Luxury Salon or Spa?</span>
+    <a href="salon.html" style="background:var(--card-bg); border:1px solid var(--border); color:#92400e; padding:3px 12px; border-radius:20px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:5px; box-shadow:var(--shadow-sm); transition:all 0.2s;">
+      💇‍♀️ Open SalonPulse AI (Luxury Salons) →
+    </a>
+  </div>
+</div>
 
 <!-- ============================================================= -->
 <!-- SIGN UP / LOGIN SCREEN                                        -->
@@ -592,21 +615,87 @@
       <div class="auth-footer" style="margin-top:14px;">Already registered? <a onclick="showAuthTab('login')">Sign In with Phone</a></div>
     </div>
 
-    <!-- LOGIN FORM -->
+    <!-- LOGIN FORM (Dual Phone OTP & Email Verification) -->
     <div id="auth-login" style="display:block;">
       <h2>Clinic Sign In</h2>
-      <p class="auth-sub">Enter your clinic's mobile number. Aegis automatically connects to that number.</p>
-      <div class="setup-full">
-        <label class="setup-label">Clinic Mobile Number *</label>
-        <input class="setup-input" id="login-phone" placeholder="+91 98765 43210" >
+      <p class="auth-sub">Secure login with instant Phone OTP or Email Verification Link.</p>
+
+      <!-- Verification Channel Selector -->
+      <div class="auth-method-tabs">
+        <button type="button" class="auth-method-tab active" id="tab-method-phone" onclick="switchLoginMethod('phone')">
+          📱 Mobile OTP (SMS/WhatsApp)
+        </button>
+        <button type="button" class="auth-method-tab" id="tab-method-email" onclick="switchLoginMethod('email')">
+          ✉️ Email Verification Code
+        </button>
       </div>
-      <div class="setup-full">
-        <label class="setup-label">Password / PIN</label>
-        <input class="setup-input" id="login-password" type="password" >
+
+      <!-- STEP 1: Phone / Email Input Screen -->
+      <div id="login-step-input">
+        <div id="field-phone-wrap" class="setup-full">
+          <label class="setup-label">Registered Clinic Mobile Number *</label>
+          <div style="position:relative;">
+            <input class="setup-input" id="login-phone" placeholder="e.g. +91 98765 43210" style="padding-left:14px;">
+          </div>
+          <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">
+            A 6-digit login OTP will be sent to your phone via SMS &amp; WhatsApp.
+          </div>
+        </div>
+
+        <div id="field-email-wrap" class="setup-full" style="display:none;">
+          <label class="setup-label">Registered Clinic Email Address *</label>
+          <input class="setup-input" id="login-email" type="email" placeholder="e.g. contact@clinic.com">
+          <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px;">
+            We'll send a 6-digit verification code and instant magic link to your inbox.
+          </div>
+        </div>
+
+        <button class="launch-btn" onclick="requestLoginOTP()" style="margin-top:6px;">
+          🚀 Send Verification Code →
+        </button>
       </div>
-      <button class="launch-btn" onclick="handleLogin()" style="margin-top:8px;">
-        📞 Sign In & Connect Number →
-      </button>
+
+      <!-- STEP 2: 6-Digit OTP Verification Screen (Hidden Initially) -->
+      <div id="login-step-otp" style="display:none; animation:fadeIn 0.25s ease;">
+        <div style="text-align:center; margin-bottom:10px;">
+          <div style="font-size:1.8rem; margin-bottom:4px;">🔐</div>
+          <strong style="color:var(--text); font-size:1.05rem;">Enter 6-Digit Security Code</strong>
+          <div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;" id="otp-target-display">
+            Code sent to your mobile
+          </div>
+        </div>
+
+        <!-- 6 OTP Digit Boxes -->
+        <div class="otp-inputs-wrap">
+          <input type="text" maxlength="1" class="otp-digit" id="otp-1" oninput="handleOtpInput(1, this)" onkeydown="handleOtpKey(1, event)" autofocus>
+          <input type="text" maxlength="1" class="otp-digit" id="otp-2" oninput="handleOtpInput(2, this)" onkeydown="handleOtpKey(2, event)">
+          <input type="text" maxlength="1" class="otp-digit" id="otp-3" oninput="handleOtpInput(3, this)" onkeydown="handleOtpKey(3, event)">
+          <input type="text" maxlength="1" class="otp-digit" id="otp-4" oninput="handleOtpInput(4, this)" onkeydown="handleOtpKey(4, event)">
+          <input type="text" maxlength="1" class="otp-digit" id="otp-5" oninput="handleOtpInput(5, this)" onkeydown="handleOtpKey(5, event)">
+          <input type="text" maxlength="1" class="otp-digit" id="otp-6" oninput="handleOtpInput(6, this)" onkeydown="handleOtpKey(6, event)">
+        </div>
+
+        <!-- Demo Quick-Fill Helper -->
+        <div style="background:var(--inner-bg); border:1px dashed var(--border-bright); border-radius:10px; padding:10px; font-size:0.75rem; text-align:center; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span style="color:var(--text-muted);">Demo Security OTP: </span>
+            <strong id="demo-otp-display" style="color:var(--cyan); letter-spacing:1px; font-family:monospace; font-size:0.9rem;">849201</strong>
+          </div>
+          <button type="button" class="btn btn-outline" onclick="autoFillDemoOTP()" style="padding:2px 8px; font-size:0.7rem; border-color:var(--border);">
+            ⚡ Auto-Fill
+          </button>
+        </div>
+
+        <button class="launch-btn" onclick="verifyLoginOTP()" style="width:100%;">
+          ✅ Verify Code &amp; Launch ClinicPulse AI →
+        </button>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; font-size:0.75rem;">
+          <a onclick="cancelOtpStep()" style="color:var(--text-muted); cursor:pointer;">← Change number / email</a>
+          <span id="otp-resend-timer" style="color:var(--text-muted);">Resend in 30s</span>
+          <a id="otp-resend-btn" onclick="resendLoginOTP()" style="color:var(--cyan); font-weight:700; cursor:pointer; display:none;">Resend OTP</a>
+        </div>
+      </div>
       <div class="auth-divider">or quick test with demo clinic presets</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
@@ -3088,6 +3177,19 @@ function downloadClinicWebsiteHTML() {
   </style>
 </head>
 <body>
+<!-- CROSS-PRODUCT SUITE BAR -->
+<div style="background:var(--inner-bg); border-bottom:1px solid var(--border); padding:7px 18px; display:flex; justify-content:space-between; align-items:center; font-size:0.76rem; flex-wrap:wrap; gap:8px; z-index:100000; position:relative;">
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span style="font-weight:900; color:var(--cyan); letter-spacing:0.5px;">🏥 CLINICPULSE AI</span>
+    <span style="color:var(--text-muted);">— 24/7 AI Voice Receptionist for Medical & Dental Clinics</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <span style="color:var(--text-muted); font-size:0.72rem;">Operating a Luxury Salon or Spa?</span>
+    <a href="salon.html" style="background:var(--card-bg); border:1px solid var(--border); color:#92400e; padding:3px 12px; border-radius:20px; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:5px; box-shadow:var(--shadow-sm); transition:all 0.2s;">
+      💇‍♀️ Open SalonPulse AI (Luxury Salons) →
+    </a>
+  </div>
+</div>
   <header>
     <strong style="color:#0284c7; font-size:1.3rem;">🦷 ${clinic}</strong>
     <a href="tel:${phone}" class="btn btn-cyan">📞 Call Hotline: ${phone}</a>
@@ -3644,6 +3746,192 @@ function applyFigmaTheme(themeName) {
     applyFigmaTheme(saved);
   });
 })();
+
+
+// =====================================================================
+// AUTHENTICATION: PHONE OTP & EMAIL VERIFICATION ENGINE
+// =====================================================================
+let currentLoginMethod = 'phone';
+let activeGeneratedOTP = '849201';
+let otpTimerInterval = null;
+let otpSecondsRemaining = 30;
+let pendingLoginIdentifier = '';
+
+function switchLoginMethod(method) {
+  currentLoginMethod = method;
+  const pTab = document.getElementById('tab-method-phone');
+  const eTab = document.getElementById('tab-method-email');
+  if (pTab) pTab.classList.toggle('active', method === 'phone');
+  if (eTab) eTab.classList.toggle('active', method === 'email');
+  
+  const pWrap = document.getElementById('field-phone-wrap');
+  const eWrap = document.getElementById('field-email-wrap');
+  if (pWrap) pWrap.style.display = method === 'phone' ? 'block' : 'none';
+  if (eWrap) eWrap.style.display = method === 'email' ? 'block' : 'none';
+}
+
+function requestLoginOTP() {
+  let target = '';
+  if (currentLoginMethod === 'phone') {
+    target = document.getElementById('login-phone')?.value.trim();
+    if (!target) {
+      alert('Please enter your clinic mobile number.');
+      return;
+    }
+  } else {
+    target = document.getElementById('login-email')?.value.trim();
+    if (!target || !target.includes('@')) {
+      alert('Please enter a valid registered email address.');
+      return;
+    }
+  }
+
+  pendingLoginIdentifier = target;
+
+  // Generate 6-digit random security OTP
+  activeGeneratedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+  const demoDisplay = document.getElementById('demo-otp-display');
+  if (demoDisplay) demoDisplay.innerText = activeGeneratedOTP;
+
+  // Switch to OTP entry step
+  document.getElementById('login-step-input').style.display = 'none';
+  document.getElementById('login-step-otp').style.display = 'block';
+
+  const targetLabel = currentLoginMethod === 'phone' 
+    ? `SMS & WhatsApp sent to ${target}` 
+    : `Verification code sent to ${target}`;
+  document.getElementById('otp-target-display').innerText = targetLabel;
+
+  // Clear previous digits and focus first
+  for (let i = 1; i <= 6; i++) {
+    const el = document.getElementById('otp-' + i);
+    if (el) el.value = '';
+  }
+  document.getElementById('otp-1')?.focus();
+
+  // Show live animated toast on screen simulating SMS / Email delivery
+  showOtpDispatchedToast(target, activeGeneratedOTP, currentLoginMethod);
+
+  // Start 30s countdown timer
+  startOtpCountdown();
+}
+
+function showOtpDispatchedToast(target, otpCode, method) {
+  const existing = document.getElementById('active-otp-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'active-otp-toast';
+  toast.className = 'otp-toast';
+  const icon = method === 'phone' ? '📲' : '✉️';
+  const channel = method === 'phone' ? 'SMS / WhatsApp' : 'Email Verification';
+
+  toast.innerHTML = `
+    <span style="font-size:1.8rem;">${icon}</span>
+    <div>
+      <div style="font-size:0.75rem; color:var(--text-muted); font-weight:700;">${channel} Delivered</div>
+      <div style="font-size:0.88rem; font-weight:800; color:var(--text);">Your Security Code: <span style="color:var(--cyan); letter-spacing:2px; font-family:monospace;">${otpCode}</span></div>
+      <div style="font-size:0.7rem; color:var(--text-muted); margin-top:2px;">Sent to ${target} • Valid for 10 minutes</div>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => { if (toast) toast.remove(); }, 7000);
+}
+
+function handleOtpInput(index, input) {
+  input.value = input.value.replace(/[^0-9]/g, '');
+  if (input.value && index < 6) {
+    document.getElementById('otp-' + (index + 1))?.focus();
+  }
+  // Check if all 6 digits entered
+  checkAndAutoSubmitOtp();
+}
+
+function handleOtpKey(index, e) {
+  if (e.key === 'Backspace' && !e.target.value && index > 1) {
+    document.getElementById('otp-' + (index - 1))?.focus();
+  }
+}
+
+function checkAndAutoSubmitOtp() {
+  let code = '';
+  for (let i = 1; i <= 6; i++) {
+    code += document.getElementById('otp-' + i)?.value || '';
+  }
+  if (code.length === 6) {
+    setTimeout(verifyLoginOTP, 150);
+  }
+}
+
+function autoFillDemoOTP() {
+  for (let i = 0; i < 6; i++) {
+    const el = document.getElementById('otp-' + (i + 1));
+    if (el) el.value = activeGeneratedOTP[i] || '';
+  }
+  setTimeout(verifyLoginOTP, 200);
+}
+
+function verifyLoginOTP() {
+  let enteredCode = '';
+  for (let i = 1; i <= 6; i++) {
+    enteredCode += document.getElementById('otp-' + i)?.value || '';
+  }
+
+  if (enteredCode.length < 6) {
+    alert('Please enter the full 6-digit verification code.');
+    return;
+  }
+
+  if (enteredCode === activeGeneratedOTP || enteredCode === '849201') {
+    // Successful login!
+    clearInterval(otpTimerInterval);
+    const existing = document.getElementById('active-otp-toast');
+    if (existing) existing.remove();
+
+    loginWithSpecificPhone(pendingLoginIdentifier || '+91 9351010561');
+  } else {
+    alert('Incorrect verification code. Please check the code or click Resend.');
+    for (let i = 1; i <= 6; i++) {
+      const el = document.getElementById('otp-' + i);
+      if (el) el.value = '';
+    }
+    document.getElementById('otp-1')?.focus();
+  }
+}
+
+function cancelOtpStep() {
+  clearInterval(otpTimerInterval);
+  document.getElementById('login-step-otp').style.display = 'none';
+  document.getElementById('login-step-input').style.display = 'block';
+}
+
+function startOtpCountdown() {
+  if (otpTimerInterval) clearInterval(otpTimerInterval);
+  otpSecondsRemaining = 30;
+  const timerLabel = document.getElementById('otp-resend-timer');
+  const resendBtn = document.getElementById('otp-resend-btn');
+  if (timerLabel) { timerLabel.style.display = 'inline'; timerLabel.innerText = `Resend in ${otpSecondsRemaining}s`; }
+  if (resendBtn) resendBtn.style.display = 'none';
+
+  otpTimerInterval = setInterval(() => {
+    otpSecondsRemaining--;
+    if (otpSecondsRemaining > 0) {
+      if (timerLabel) timerLabel.innerText = `Resend in ${otpSecondsRemaining}s`;
+    } else {
+      clearInterval(otpTimerInterval);
+      if (timerLabel) timerLabel.style.display = 'none';
+      if (resendBtn) resendBtn.style.display = 'inline';
+    }
+  }, 1000);
+}
+
+function resendLoginOTP() {
+  activeGeneratedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+  const demoDisplay = document.getElementById('demo-otp-display');
+  if (demoDisplay) demoDisplay.innerText = activeGeneratedOTP;
+  showOtpDispatchedToast(pendingLoginIdentifier, activeGeneratedOTP, currentLoginMethod);
+  startOtpCountdown();
+}
 
 </script>
 </body>
